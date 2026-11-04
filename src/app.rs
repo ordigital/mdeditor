@@ -1450,6 +1450,27 @@ impl App {
                         .lock_focus(true)
                         .layouter(&mut layouter)
                         .show(ui);
+                    // While a drag-selection runs, egui ignores the wheel and does not scroll toward a
+                    // pointer that left the view, so both are done here: wheel, and edge auto-scroll.
+                    if ctx.dragged_id() == Some(id) {
+                        let view = ui.clip_rect();
+                        let (wheel, pointer) = ctx.input(|i| (i.smooth_scroll_delta.y, i.pointer.latest_pos()));
+                        let edge = pointer.map_or(0.0, |p| {
+                            if p.y < view.top() {
+                                p.y - view.top()
+                            } else if p.y > view.bottom() {
+                                p.y - view.bottom()
+                            } else {
+                                0.0
+                            }
+                        });
+                        // `scroll_with_delta` moves the content the other way than the wheel delta.
+                        let delta = -wheel + 0.5 * edge;
+                        if delta != 0.0 {
+                            ui.scroll_with_delta(vec2(0.0, delta));
+                            ctx.request_repaint();
+                        }
+                    }
                     ui.add_space(40.0);
 
                     let Some(cache) = &doc.cache else { return };
