@@ -344,6 +344,8 @@ pub struct App {
     v_pressed: bool,
     pasted: bool,
     scroll_to: Option<usize>,
+    /// Editor scroll offset to apply on the next frame (drag-selection auto-scroll).
+    scroll_pending: Option<f32>,
     title: String,
     recent: Vec<PathBuf>,
     browser: Option<files::Browser>,
@@ -624,6 +626,7 @@ impl App {
             v_pressed: false,
             pasted: false,
             scroll_to: None,
+            scroll_pending: None,
             title: String::new(),
             recent: Config::load_recent(),
             browser: None,
@@ -1381,7 +1384,7 @@ impl App {
             return (None, None);
         }
 
-        let Self { docs, active, images, cfg, find, scroll_to, .. } = self;
+        let Self { docs, active, images, cfg, find, scroll_to, scroll_pending, .. } = self;
         let doc = &mut docs[*active];
         let id = doc.edit_id();
         let dir = doc.dir();
@@ -1395,7 +1398,12 @@ impl App {
         let look = cfg.look();
         let font = cfg.font.clone();
 
-        ScrollArea::vertical().id_salt(("scroll", doc.id)).auto_shrink(false).show(ui, |ui| {
+        let mut area = ScrollArea::vertical().id_salt(("scroll", doc.id)).auto_shrink(false);
+        if let Some(y) = scroll_pending.take() {
+            area = area.vertical_scroll_offset(y);
+        }
+        let mut drag_scroll = 0.0;
+        let out = area.show(ui, |ui| {
             ui.horizontal_top(|ui| {
                 ui.add_space(left);
                 ui.vertical(|ui| {
@@ -1451,7 +1459,7 @@ impl App {
                         .layouter(&mut layouter)
                         .show(ui);
                     // While a drag-selection runs, egui ignores the wheel and does not scroll toward a
-                    // pointer that left the view, so both are done here: wheel, and edge auto-scroll.
+                    // pointer that left the view, so both are done here (see `scroll_pending` below).
                     if ctx.dragged_id() == Some(id) {
                         let view = ui.clip_rect();
                         let (wheel, pointer) = ctx.input(|i| (i.smooth_scroll_delta.y, i.pointer.latest_pos()));
@@ -1464,12 +1472,8 @@ impl App {
                                 0.0
                             }
                         });
-                        // `scroll_with_delta` moves the content the other way than the wheel delta.
-                        let delta = -wheel + 0.5 * edge;
-                        if delta != 0.0 {
-                            ui.scroll_with_delta(vec2(0.0, delta));
-                            ctx.request_repaint();
-                        }
+                        // Positive offsets scroll down, the wheel delta is the other way round.
+                        drag_scroll = edge * 0.5 - wheel;
                     }
                     ui.add_space(40.0);
 
@@ -1639,6 +1643,12 @@ impl App {
                 });
             });
         });
+        if drag_scroll != 0.0 {
+            // Offsets set by `scroll_with_delta` are not applied reliably while a drag is active,
+            // so the new offset is handed to the next frame's ScrollArea instead.
+            *scroll_pending = Some((out.state.offset.y + drag_scroll).max(0.0));
+            ctx.request_repaint();
+        }
         (clicked_link, middle)
     }
 
