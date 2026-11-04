@@ -1521,9 +1521,7 @@ impl App {
                                 let x = r.min.x - look.indent() * 0.5;
                                 painter.circle_filled(pos2(x, r.center().y), (look.size * 0.15).max(2.5), md::DIM);
                             }
-                            Deco::Table { rows, align } => {
-                                paint_table(&ctx, painter, &look, gx, col_w, rows, align, &at);
-                            }
+                            Deco::Table { rows, widths, align } => paint_table(painter, gx, rows, widths, align, &at),
                             Deco::Check { ci, byte, checked } => {
                                 let r = at(*ci);
                                 let side = (look.size * 1.0).round();
@@ -1882,55 +1880,24 @@ impl App {
     }
 }
 
-/// Draws a markdown table over the hidden source lines (each line reserved one row's height).
-#[allow(clippy::too_many_arguments)]
+/// Draws a markdown table over the hidden source lines (each line reserved its row's height).
 fn paint_table(
-    ctx: &Context,
     painter: &egui::Painter,
-    look: &md::Look,
     x0: f32,
-    max_w: f32,
-    rows: &[(usize, Vec<String>)],
+    rows: &[md::TableRow],
+    widths: &[f32],
     align: &[Align],
     at: &dyn Fn(usize) -> Rect,
 ) {
     const PAD: f32 = 12.0;
-    // Cell text is as small as tags.
-    let look = &md::Look { size: (look.size * 0.9).round(), ..*look };
-    let ppp = ctx.pixels_per_point();
-    let mut layout = |job| ctx.fonts_mut(|f| f.layout_job(job));
-    let cells: Vec<Vec<Arc<Galley>>> = rows
-        .iter()
-        .enumerate()
-        .map(|(r, (_, cells))| {
-            cells
-                .iter()
-                .map(|c| {
-                    let text = if r == 0 && !c.is_empty() { format!("**{c}**") } else { c.clone() };
-                    md::build(&text, None, f32::INFINITY, look, ppp, &mut |_| None, &mut layout).0
-                })
-                .collect()
-        })
-        .collect();
-    let ncols = cells.iter().map(Vec::len).max().unwrap_or(0);
-    let mut widths = vec![0.0f32; ncols];
-    for row in &cells {
-        for (c, g) in row.iter().enumerate() {
-            widths[c] = widths[c].max(g.size().x + 2.0 * PAD);
-        }
-    }
-    let total: f32 = widths.iter().sum();
-    if total > max_w {
-        widths.iter_mut().for_each(|w| *w *= max_w / total);
-    }
     let right = x0 + widths.iter().sum::<f32>();
     let stroke = Stroke::new(1.0, md::BORDER);
     let (Some(first), Some(last)) = (rows.first(), rows.last()) else {
         return;
     };
-    let (top, bottom) = (at(first.0).min.y, at(last.0).max.y);
-    for (r, ((ci, _), row)) in rows.iter().zip(&cells).enumerate() {
-        let line = at(*ci);
+    let (top, bottom) = (at(first.ci).min.y, at(last.ci).max.y);
+    for (r, row) in rows.iter().enumerate() {
+        let line = at(row.ci);
         let (y0, y1) = (if r == 0 { top } else { line.min.y }, line.max.y);
         if r == 0 {
             painter.rect_filled(Rect::from_min_max(pos2(x0, y0), pos2(right, y1)), 0.0, md::CODE_BG);
@@ -1938,15 +1905,14 @@ fn paint_table(
         painter.hline(x0..=right, y1, stroke);
         let mut x = x0;
         for (c, w) in widths.iter().enumerate() {
-            if let Some(g) = row.get(c) {
+            if let Some(g) = row.cells.get(c) {
                 let cell = Rect::from_min_max(pos2(x + PAD, y0), pos2(x + w - PAD, y1));
                 let gx = match align.get(c) {
                     Some(Align::Center) => cell.center().x - g.size().x / 2.0,
                     Some(Align::Max) => cell.max.x - g.size().x,
                     _ => cell.min.x,
                 };
-                let pos = pos2(gx, cell.center().y - g.size().y / 2.0);
-                painter.with_clip_rect(cell.intersect(painter.clip_rect())).galley(pos, g.clone(), md::TEXT);
+                painter.galley(pos2(gx, cell.center().y - g.size().y / 2.0), g.clone(), md::TEXT);
             }
             x += w;
         }
@@ -1954,7 +1920,7 @@ fn paint_table(
     painter.hline(x0..=right, top, stroke);
     let mut x = x0;
     painter.vline(x, top..=bottom, stroke);
-    for w in &widths {
+    for w in widths {
         x += w;
         painter.vline(x, top..=bottom, stroke);
     }
@@ -2498,12 +2464,26 @@ mod tests {
     fn tables_are_detected_and_revealed_at_cursor() {
         let text = "| a | b |\n|:-:|---|\n| 1 | 2 |\nafter";
         let (_, decos) = layout(text, None, 500.0);
-        let Some(Deco::Table { rows, align }) = decos.first() else { panic!("no table") };
+        let Some(Deco::Table { rows, align, .. }) = decos.first() else { panic!("no table") };
         assert_eq!(rows.len(), 2);
-        assert_eq!(rows[1].1, vec!["1".to_owned(), "2".to_owned()]);
+        assert_eq!(rows[1].cells[1].text(), "2");
         assert_eq!(align[0], Align::Center);
         let (_, decos) = layout(text, Some(3), 500.0);
         assert!(!decos.iter().any(|d| matches!(d, Deco::Table { .. })), "raw source while editing");
+    }
+
+    #[test]
+    fn long_table_cells_wrap_and_rows_grow() {
+        let long = "word ".repeat(40);
+        let text = format!("| a | b |\n|---|---|\n| short | {long}|\n");
+        let (g, decos) = layout(&text, None, 400.0);
+        let Some(Deco::Table { rows, widths, .. }) = decos.first() else { panic!("no table") };
+        assert!(widths.iter().sum::<f32>() <= 400.5, "columns fit the text width");
+        assert!(rows[1].cells[1].rows.len() > 2, "the long cell wraps");
+        let (head, body) = (rows[0].cells[0].size().y, rows[1].cells[1].size().y);
+        assert!(body > head * 2.0, "the row grows with its content");
+        // The galley reserves the row heights, so nothing overlaps the next paragraph.
+        assert!(g.size().y >= head + body);
     }
 
     #[test]

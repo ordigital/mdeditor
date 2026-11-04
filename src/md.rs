@@ -101,9 +101,10 @@ pub enum Deco {
         end: usize,
         url: String,
     },
-    /// Rows as (char index of the line, cells); the first row is the header.
+    /// The first row is the header; cells are laid out (wrapped) to the column widths.
     Table {
-        rows: Vec<(usize, Vec<String>)>,
+        rows: Vec<TableRow>,
+        widths: Vec<f32>,
         align: Vec<Align>,
     },
     /// A rendered formula: centered on its own row(s) when `display`, else inline at `ci`.
@@ -116,6 +117,12 @@ pub enum Deco {
         /// left of the first hidden character.
         shift: f32,
     },
+}
+
+pub struct TableRow {
+    /// Char index of the source line, whose (hidden) row reserves the row's height.
+    pub ci: usize,
+    pub cells: Vec<Arc<Galley>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Default)]
@@ -261,6 +268,92 @@ fn table_cells(l: &str) -> Vec<String> {
     cells.iter().map(|c| c.trim().to_owned()).collect()
 }
 
+const CELL_PAD: f32 = 12.0;
+
+fn cell_galley(cx: &mut Cx, look: &Look, text: &str, wrap: f32, ppp: f32) -> Arc<Galley> {
+    build(text, None, wrap, look, ppp, &mut |_| None, &mut *cx.layout).0
+}
+
+/// Column widths: natural widths when they fit, else the narrow columns keep theirs and the
+/// wide ones share what is left equally.
+fn column_widths(natural: &[f32], avail: f32) -> Vec<f32> {
+    let mut widths = natural.to_vec();
+    if natural.iter().sum::<f32>() <= avail {
+        return widths;
+    }
+    let mut open: Vec<usize> = (0..natural.len()).collect();
+    let mut left = avail;
+    while !open.is_empty() {
+        let share = left / open.len() as f32;
+        let (fit, rest): (Vec<usize>, Vec<usize>) = open.iter().partition(|&&i| natural[i] <= share);
+        if fit.is_empty() {
+            for &i in &open {
+                widths[i] = share.max(2.0 * CELL_PAD + 16.0);
+            }
+            break;
+        }
+        left -= fit.iter().map(|&i| natural[i]).sum::<f32>();
+        open = rest;
+    }
+    widths
+}
+
+/// Lays out the table in lines `a..=b`; returns it with the reserved height of each source row.
+fn layout_table(
+    cx: &mut Cx,
+    lines: &[&str],
+    kinds: &[Kind],
+    line_ci: &[usize],
+    (a, b): (usize, usize),
+    ppp: f32,
+) -> (Deco, Vec<(usize, u16)>) {
+    // Cell text is as small as tags.
+    let small = Look { size: (cx.look.size * 0.9).round(), ..*cx.look };
+    let align = table_cells(lines[a + 1])
+        .iter()
+        .map(|c| match (c.starts_with(':'), c.ends_with(':')) {
+            (true, true) => Align::Center,
+            (false, true) => Align::Max,
+            _ => Align::Min,
+        })
+        .collect();
+    let row_lines: Vec<usize> = (a..=b).filter(|&l| kinds[l] == Kind::TableRow).collect();
+    let texts: Vec<Vec<String>> = row_lines
+        .iter()
+        .enumerate()
+        .map(|(r, &l)| {
+            let header = |c: String| if r == 0 && !c.is_empty() { format!("**{c}**") } else { c };
+            table_cells(lines[l]).into_iter().map(header).collect()
+        })
+        .collect();
+    let ncols = texts.iter().map(Vec::len).max().unwrap_or(0);
+    let mut natural = vec![0.0f32; ncols];
+    for row in &texts {
+        for (c, text) in row.iter().enumerate() {
+            let g = cell_galley(cx, &small, text, f32::INFINITY, ppp);
+            natural[c] = natural[c].max(g.size().x + 2.0 * CELL_PAD);
+        }
+    }
+    let widths = column_widths(&natural, cx.wrap);
+    let min_height = cx.look.table_row_height();
+    let mut heights = Vec::new();
+    let rows = row_lines
+        .iter()
+        .zip(&texts)
+        .map(|(&l, row)| {
+            let cells: Vec<Arc<Galley>> = row
+                .iter()
+                .enumerate()
+                .map(|(c, t)| cell_galley(cx, &small, t, widths[c] - 2.0 * CELL_PAD, ppp))
+                .collect();
+            let height = cells.iter().map(|g| g.size().y + 12.0).fold(min_height, f32::max).ceil();
+            heights.push((l, height as u16));
+            TableRow { ci: line_ci[l], cells }
+        })
+        .collect();
+    (Deco::Table { rows, widths, align }, heights)
+}
+
 /// Display-math delimiters: (open, close).
 const MATH_DELIMS: [(&str, &str); 2] = [("$$", "$$"), ("\\[", "\\]")];
 
@@ -394,6 +487,7 @@ pub fn build(
         .collect();
 
     let mut galleys = Vec::with_capacity(lines.len());
+    let mut table_heights: Vec<(usize, u16)> = Vec::new();
     let mut byte0 = 0;
     for (li, raw) in lines.iter().enumerate() {
         let ci0 = line_ci[li];
@@ -409,6 +503,11 @@ pub fn build(
                 let (a, b) = block_of(li).unwrap_or((li, li));
                 let block_rev = cur_line.is_some_and(|c| (a..=b).contains(&c));
                 let delim = li == a || li == b;
+                if li == a && kind == Kind::TableRow && !block_rev {
+                    let (table, heights) = layout_table(&mut cx, &lines, &kinds, &line_ci, (a, b), pixels_per_point);
+                    cx.decos.push(table);
+                    table_heights = heights;
+                }
                 let s = match kind {
                     Kind::Fence | Kind::Front if delim && block_rev => {
                         St { dim: true, mono: true, ..Default::default() }
@@ -428,27 +527,22 @@ pub fn build(
                         cx.decos.push(Deco::Math { ci: ci0, galley, boxed, display: true, shift: 0.0 });
                         St { hidden: true, lh: h as u16, ..Default::default() }
                     }
-                    _ => St { hidden: true, lh: look.table_row_height() as u16, ..Default::default() },
+                    _ => {
+                        let lh = table_heights
+                            .iter()
+                            .find(|(l, _)| *l == li)
+                            .map_or(look.table_row_height() as u16, |t| t.1);
+                        St { hidden: true, lh, ..Default::default() }
+                    }
                 };
                 st.fill(s);
+                if kind == Kind::TableRow && !block_rev {
+                    // Only the first hidden char reserves the row's height (a long line may wrap).
+                    st.iter_mut().skip(1).for_each(|x| x.lh = 0);
+                }
                 if li == a && matches!(kind, Kind::Fence | Kind::Code | Kind::Front) {
                     let end_ci = line_ci[b] + chars(lines[b]);
                     cx.decos.push(Deco::Code(ci0, end_ci.saturating_sub(1)));
-                }
-                if li == a && kind == Kind::TableRow && !block_rev {
-                    let align = table_cells(lines[a + 1])
-                        .iter()
-                        .map(|c| match (c.starts_with(':'), c.ends_with(':')) {
-                            (true, true) => Align::Center,
-                            (false, true) => Align::Max,
-                            _ => Align::Min,
-                        })
-                        .collect();
-                    let rows = (a..=b)
-                        .filter(|&l| kinds[l] == Kind::TableRow)
-                        .map(|l| (line_ci[l], table_cells(lines[l])))
-                        .collect();
-                    cx.decos.push(Deco::Table { rows, align });
                 }
             }
         }
