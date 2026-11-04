@@ -1797,10 +1797,7 @@ impl App {
                 ui.vertical_centered(|ui| {
                     ui.label("ORDIGITAL Adam Mateusz Brożyński");
                     ui.label(format!("{}: MIT", t("License")));
-                    ui.label(format!(
-                        "{} Claude Opus 5.5, Claude Sonnet 5.5 (Anthropic)",
-                        t("Code written with the help of")
-                    ));
+                    ui.label(format!("{} Claude 5.5 (Opus/Sonnet/Haiku)", t("Code written with the help of")));
                 });
                 ui.add_space(16.0);
                 centered_row(ui, |ui| ui.button("OK").clicked() || enter)

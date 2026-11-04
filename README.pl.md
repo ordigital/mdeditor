@@ -88,6 +88,6 @@ Ustawienia są w `~/.config/mdedit/config`, ostatnie pliki w `~/.config/mdedit/r
 
 MIT, zob. [LICENSE](LICENSE). Autor: ORDIGITAL Adam Mateusz Brożyński.
 
-Kod napisany z pomocą Claude Opus 5.5 i Claude Sonnet 5.5 (Anthropic).
+Kod napisany z pomocą Claude 5.5 (Opus/Sonnet/Haiku).
 
 Czcionki: [Inter](https://github.com/rsms/inter) i [Source Code Pro](https://github.com/adobe-fonts/source-code-pro), obie na licencji SIL Open Font License 1.1 (zob. `assets/`). Kolory i proporcje są zgodne z domyślnym ciemnym motywem Obsidiana; projekt nie jest powiązany z Obsidianem.

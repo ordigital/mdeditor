@@ -96,7 +96,7 @@ Settings are stored in `~/.config/mdedit/config`, recent files in `~/.config/mde
 
 MIT, see [LICENSE](LICENSE). Created by ORDIGITAL Adam Mateusz Brożyński.
 
-Code written with the help of Claude Opus 5.5 and Claude Sonnet 5.5 (Anthropic).
+Code written with the help of Claude 5.5 (Opus/Sonnet/Haiku).
 
 Fonts: [Inter](https://github.com/rsms/inter) and [Source Code Pro](https://github.com/adobe-fonts/source-code-pro),
 both under the SIL Open Font License 1.1 (see `assets/`). Colors and proportions follow the default dark theme of Obsidian; this project is not affiliated with Obsidian.
