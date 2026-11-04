@@ -36,9 +36,18 @@ impl Browser {
         }
         self.loaded_at = now;
         let mut entries: Vec<(String, bool)> = std::fs::read_dir(&self.dir)
-            .map(|rd| rd.flatten().map(|e| (e.file_name().to_string_lossy().into_owned(), e.path().is_dir())).collect())
+            .map(|rd| {
+                rd.flatten()
+                    .map(|e| {
+                        // `file_type` needs no extra stat; only symlinks are followed to see what they point to.
+                        let is_dir = e.file_type().is_ok_and(|t| t.is_dir() || (t.is_symlink() && e.path().is_dir()));
+                        (e.file_name().to_string_lossy().into_owned(), is_dir)
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
-        entries.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.to_lowercase().cmp(&b.0.to_lowercase())));
+        // Folders first, then by name without regard to case (the lowercase key is computed once per entry).
+        entries.sort_by_cached_key(|(name, is_dir)| (!is_dir, name.to_lowercase()));
         self.entries = entries;
     }
 

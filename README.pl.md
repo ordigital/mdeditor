@@ -17,6 +17,7 @@ Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyc
 - Schowek zaznaczenia w Linuksie: zaznacz tekst, wklej środkowym przyciskiem myszy albo Shift+Insert.
 - Domyślne ustawienia z ciemnego motywu Obsidiana: czcionki Inter (tekst) i Source Code Pro (kod), obie wbudowane. Interfejs używa czcionki systemowej (ustawienia KDE / GNOME, zapasowo Noto Sans 10).
 - Pliki binarne i bardzo duże (ponad 5 MB) są odrzucane, zamiast zamrażać edytor.
+- Końce linii Windows (CRLF) są zachowywane przy zapisie. Ctrl+klik otwiera tylko linki internetowe i pocztowe, nigdy programów ani skryptów.
 
 `examples/example.md` (po angielsku) i `examples/przyklad.md` (po polsku) pokazują wszystkie obsługiwane elementy.
 

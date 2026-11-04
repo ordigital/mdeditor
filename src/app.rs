@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, mpsc::Receiver};
+use std::sync::{Arc, OnceLock, mpsc::Receiver};
 
 use eframe::egui::{
     self, Align, Align2, Button, CentralPanel, Color32, Context, CornerRadius, FontFamily, FontId, Galley, Id, Key,
@@ -85,6 +85,8 @@ struct Doc {
     undo: Vec<String>,
     redo: Vec<String>,
     last_edit: f64,
+    /// The file used Windows line endings; they are restored when saving (the text is kept as `\n`).
+    crlf: bool,
     /// (characters, words), recomputed only after the text changed.
     stats: std::cell::Cell<Option<(usize, usize)>>,
 }
@@ -101,6 +103,7 @@ impl Doc {
             undo: vec![],
             redo: vec![],
             last_edit: f64::NEG_INFINITY,
+            crlf: false,
             stats: Default::default(),
         }
     }
@@ -240,40 +243,60 @@ impl Config {
     }
 
     fn load() -> Self {
-        let mut c = Config {
-            lang: Lang::from_env(),
-            optimize: true,
-            line_numbers: false,
-            inline_title: true,
-            files: false,
-            embed_images: true,
-            ..Self::default_text()
-        };
+        let defaults = Config { lang: Lang::from_env(), ..Self::default_text() };
         let text = Self::path().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
-        for l in text.lines() {
-            if let Some((k, v)) = l.split_once('=') {
-                let (v, on) = (v.trim(), v.trim() == "1");
-                match k.trim() {
-                    "lang" => c.lang = Lang::from_code(v).unwrap_or(c.lang),
-                    // Settings files from before the language menu.
-                    "pl" => c.lang = if on { Lang::Polish } else { c.lang },
-                    "optimize" => c.optimize = on,
-                    "line_numbers" => c.line_numbers = on,
-                    "inline_title" => c.inline_title = on,
-                    "files" => c.files = on,
-                    "embed_images" => c.embed_images = on,
-                    "font" => c.font = v.to_owned(),
-                    "size" => c.size = v.parse().unwrap_or(c.size),
-                    "weight" => c.weight = v.parse().unwrap_or(c.weight),
-                    "bold_weight" => c.bold_weight = v.parse().unwrap_or(c.bold_weight),
-                    "code_weight" => c.code_weight = v.parse().unwrap_or(c.code_weight),
-                    "gamma" => c.gamma = v.parse().unwrap_or(c.gamma),
-                    "line_height" => c.line_height = v.parse().unwrap_or(c.line_height),
-                    _ => {}
-                }
+        defaults.parse(&text)
+    }
+
+    /// Applies `key=value` lines to `self`; unknown keys are ignored and numbers outside their range
+    /// (or not numbers) keep the current value, so a hand-edited file cannot break the layout.
+    fn parse(mut self, text: &str) -> Self {
+        fn number<T: std::str::FromStr + PartialOrd>(v: &str, range: std::ops::RangeInclusive<T>, current: T) -> T {
+            v.parse().ok().filter(|n| range.contains(n)).unwrap_or(current)
+        }
+        for line in text.lines() {
+            let Some((k, v)) = line.split_once('=') else { continue };
+            let (v, on) = (v.trim(), v.trim() == "1");
+            match k.trim() {
+                "lang" => self.lang = Lang::from_code(v).unwrap_or(self.lang),
+                // Settings files from before the language menu.
+                "pl" if on => self.lang = Lang::Polish,
+                "optimize" => self.optimize = on,
+                "line_numbers" => self.line_numbers = on,
+                "inline_title" => self.inline_title = on,
+                "files" => self.files = on,
+                "embed_images" => self.embed_images = on,
+                "font" => self.font = v.to_owned(),
+                "size" => self.size = number(v, 8.0..=48.0, self.size),
+                "weight" => self.weight = number(v, 100..=900, self.weight),
+                "bold_weight" => self.bold_weight = number(v, 100..=900, self.bold_weight),
+                "code_weight" => self.code_weight = number(v, 200..=900, self.code_weight),
+                "gamma" => self.gamma = number(v, 0.4..=1.4, self.gamma),
+                "line_height" => self.line_height = number(v, 1.0..=2.5, self.line_height),
+                _ => {}
             }
         }
-        c
+        self
+    }
+
+    fn to_text(&self) -> String {
+        let b = |v: bool| u8::from(v);
+        format!(
+            "lang={}\noptimize={}\nline_numbers={}\ninline_title={}\nfiles={}\nembed_images={}\nfont={}\nweight={}\nbold_weight={}\ncode_weight={}\ngamma={}\nsize={}\nline_height={}\n",
+            self.lang.code(),
+            b(self.optimize),
+            b(self.line_numbers),
+            b(self.inline_title),
+            b(self.files),
+            b(self.embed_images),
+            self.font,
+            self.weight,
+            self.bold_weight,
+            self.code_weight,
+            self.gamma,
+            self.size,
+            self.line_height
+        )
     }
 
     fn load_recent() -> Vec<PathBuf> {
@@ -291,25 +314,8 @@ impl Config {
 
     fn save(&self) {
         let Some(p) = Self::path() else { return };
-        let b = |v: bool| if v { 1 } else { 0 };
-        let s = format!(
-            "lang={}\noptimize={}\nline_numbers={}\ninline_title={}\nfiles={}\nembed_images={}\nfont={}\nweight={}\nbold_weight={}\ncode_weight={}\ngamma={}\nsize={}\nline_height={}\n",
-            self.lang.code(),
-            b(self.optimize),
-            b(self.line_numbers),
-            b(self.inline_title),
-            b(self.files),
-            b(self.embed_images),
-            self.font,
-            self.weight,
-            self.bold_weight,
-            self.code_weight,
-            self.gamma,
-            self.size,
-            self.line_height
-        );
         let _ = p.parent().map(std::fs::create_dir_all);
-        let _ = std::fs::write(p, s);
+        let _ = std::fs::write(p, self.to_text());
     }
 }
 
@@ -335,6 +341,9 @@ pub struct App {
     font_list: Vec<String>,
     font_filter: String,
     applied_font: (String, u16, u16, Lang),
+    applied_gamma: f32,
+    /// When the settings started to differ from the saved ones.
+    cfg_changed_at: Option<f64>,
     error: Option<String>,
     close_queue: Vec<u64>,
     quit_after: bool,
@@ -461,8 +470,13 @@ fn about_rows(lang: Lang) -> Vec<AboutRow> {
     rows
 }
 
+fn shortcuts() -> &'static [(Modifiers, Key, Action)] {
+    static TABLE: OnceLock<Vec<(Modifiers, Key, Action)>> = OnceLock::new();
+    TABLE.get_or_init(build_shortcuts)
+}
+
 /// Order matters: more specific modifier sets first (egui matches shortcuts "logically").
-fn shortcuts() -> Vec<(Modifiers, Key, Action)> {
+fn build_shortcuts() -> Vec<(Modifiers, Key, Action)> {
     use Action::*;
     let c = Modifiers::COMMAND;
     let cs = Modifiers::COMMAND | Modifiers::SHIFT;
@@ -535,10 +549,31 @@ fn image_key(dir: Option<&Path>, src: &str) -> Option<String> {
     resolve(dir, src).map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Larger images are scaled down before they become textures (GPUs limit the texture size).
+const MAX_TEXTURE_SIDE: u32 = 4096;
+
+/// Decodes an image, refusing absurd sizes up front (a tiny file can claim to be gigapixels).
+fn decode_image<R: std::io::BufRead + std::io::Seek>(reader: image::ImageReader<R>) -> Option<image::DynamicImage> {
+    let mut reader = reader.with_guessed_format().ok()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(16_384);
+    limits.max_image_height = Some(16_384);
+    reader.limits(limits);
+    reader.decode().ok()
+}
+
 fn load_image(ctx: &Context, dir: Option<&Path>, src: &str) -> Option<(TextureHandle, Vec2)> {
     let img = match src.strip_prefix("data:") {
-        Some(data) => image::load_from_memory(&base64::decode(data.split_once(',')?.1)?).ok()?,
-        None => image::open(resolve(dir, src)?).ok()?,
+        Some(data) => {
+            let bytes = base64::decode(data.split_once(',')?.1)?;
+            decode_image(image::ImageReader::new(std::io::Cursor::new(bytes)))?
+        }
+        None => decode_image(image::ImageReader::open(resolve(dir, src)?).ok()?)?,
+    };
+    let img = if img.width().max(img.height()) > MAX_TEXTURE_SIDE {
+        img.thumbnail(MAX_TEXTURE_SIDE, MAX_TEXTURE_SIDE)
+    } else {
+        img
     }
     .into_rgba8();
     let size = [img.width() as usize, img.height() as usize];
@@ -591,6 +626,30 @@ fn save_webp(rgba: image::RgbaImage, dir: &Path, stem: &str) -> Result<String, S
     Ok(name)
 }
 
+/// The scheme of a URL such as `https://…` or `mailto:…` (not a Windows drive letter like `C:`).
+fn url_scheme(url: &str) -> Option<&str> {
+    let (scheme, _) = url.split_once(':')?;
+    let valid = scheme.len() > 1 && scheme.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    valid.then_some(scheme)
+}
+
+/// Whether opening the file with the system's default handler might run code.
+fn runs_code(path: &Path) -> bool {
+    const RISKY: &[&str] = &[
+        "exe", "com", "bat", "cmd", "msi", "scr", "pif", "lnk", "ps1", "vbs", "vbe", "js", "jse", "wsf", "hta", "reg",
+        "jar", "sh", "bash", "desktop", "appimage", "run", "bin", "app", "deb", "rpm", "dll", "cpl",
+    ];
+    let risky_name = path.extension().is_some_and(|e| RISKY.iter().any(|r| e.eq_ignore_ascii_case(r)));
+    #[cfg(unix)]
+    let executable = {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    };
+    #[cfg(not(unix))]
+    let executable = false;
+    risky_name || executable
+}
+
 fn md_link_target(p: &str) -> String {
     if p.contains(' ') { format!("<{p}>") } else { p.to_owned() }
 }
@@ -617,6 +676,8 @@ impl App {
             font_list: vec![],
             font_filter: String::new(),
             applied_font: (String::new(), 0, 0, Lang::English),
+            applied_gamma: 0.0,
+            cfg_changed_at: None,
             error: None,
             close_queue: vec![],
             quit_after: false,
@@ -636,6 +697,7 @@ impl App {
             now: 0.0,
         };
         app.applied_font = (app.cfg.font.clone(), app.cfg.weight, app.cfg.bold_weight, app.cfg.lang);
+        app.applied_gamma = app.cfg.gamma;
         for f in files {
             app.open_path(f);
         }
@@ -643,6 +705,23 @@ impl App {
             app.new_doc();
         }
         app
+    }
+
+    /// Writes changed settings after they stayed unchanged for half a second (sliders and Ctrl+scroll
+    /// change them every frame); `on_exit` writes what is left.
+    fn save_config_soon(&mut self, ctx: &Context) {
+        if self.cfg == self.saved_cfg {
+            self.cfg_changed_at = None;
+            return;
+        }
+        let since = *self.cfg_changed_at.get_or_insert(self.now);
+        if self.now - since >= 0.5 {
+            self.cfg.save();
+            self.saved_cfg = self.cfg.clone();
+            self.cfg_changed_at = None;
+        } else {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
     }
 
     fn t(&self, s: &'static str) -> &'static str {
@@ -666,9 +745,9 @@ impl App {
             self.error = Some(format!("{}: {name}", self.t(why)));
             return;
         }
-        let text = match std::fs::read_to_string(&p) {
-            Ok(t) => t.replace("\r\n", "\n"),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        let (text, crlf) = match std::fs::read_to_string(&p) {
+            Ok(t) => (t.replace("\r\n", "\n"), t.contains("\r\n")),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (String::new(), false),
             Err(e) => {
                 self.error = Some(format!("{}: {e}", p.display()));
                 return;
@@ -676,7 +755,8 @@ impl App {
         };
         self.add_recent(&p);
         self.next_id += 1;
-        let doc = Doc::new(self.next_id, Some(p), text);
+        let mut doc = Doc::new(self.next_id, Some(p), text);
+        doc.crlf = crlf;
         let reuse = self.docs.len() == 1 && self.docs[0].path.is_none() && self.docs[0].text.is_empty();
         if reuse {
             self.docs[0] = doc;
@@ -706,7 +786,8 @@ impl App {
         }
         let doc = &mut self.docs[i];
         let path = doc.path.clone().unwrap();
-        match std::fs::write(&path, &doc.text) {
+        let data = if doc.crlf { doc.text.replace('\n', "\r\n") } else { doc.text.clone() };
+        match std::fs::write(&path, data) {
             Ok(()) => {
                 doc.saved = doc.text.clone();
                 true
@@ -1098,6 +1179,8 @@ impl App {
         }
     }
 
+    /// Ctrl+click on a link. Only web and mail links are handed to the system, and local files that
+    /// could run code (programs, scripts, launchers) are never opened this way.
     fn open_link(&mut self, url: &str) {
         let dir = self.docs.get(self.active).and_then(Doc::dir);
         if let Some(name) = url.strip_prefix("[[") {
@@ -1106,12 +1189,14 @@ impl App {
             if let Some(p) = resolve(dir.as_deref(), &file) {
                 self.open_path(p);
             }
-        } else if url.contains(':') && !url.starts_with('/') {
-            let _ = open::that(url);
+        } else if let Some(scheme) = url_scheme(url) {
+            if matches!(scheme.to_ascii_lowercase().as_str(), "http" | "https" | "mailto") {
+                let _ = open::that(url);
+            }
         } else if let Some(p) = resolve(dir.as_deref(), url.split('#').next().unwrap_or(url)) {
             if p.extension().is_some_and(|e| e == "md" || e == "markdown") {
                 self.open_path(p);
-            } else {
+            } else if !runs_code(&p) {
                 let _ = open::that(p);
             }
         }
@@ -1189,7 +1274,7 @@ impl App {
     }
 
     /// Detects Ctrl+V with an image-only clipboard: egui swallows the key and emits no Paste event then.
-    fn detect_image_paste(&mut self, ctx: &Context) -> bool {
+    fn detect_image_paste(&mut self, ctx: &Context) {
         let mut trigger = false;
         ctx.input(|i| {
             for e in &i.events {
@@ -1205,7 +1290,9 @@ impl App {
                 }
             }
         });
-        trigger && self.paste_image(ctx)
+        if trigger {
+            self.paste_image(ctx);
+        }
     }
 
     fn menu_bar(&mut self, ui: &mut Ui, acts: &mut Vec<Action>) {
@@ -1428,8 +1515,8 @@ impl App {
                     let cache = &mut doc.cache;
                     let mut img_size = |src: &str| {
                         let key = image_key(dir.as_deref(), src)?;
-                        let entry = images.entry(key).or_insert_with(|| load_image(&ctx, dir.as_deref(), src));
-                        entry.as_ref().map(|(_, s)| *s)
+                        let entry = images.entry(key.clone()).or_insert_with(|| load_image(&ctx, dir.as_deref(), src));
+                        entry.as_ref().map(|(_, size)| (key, *size))
                     };
                     let mut layouter = |ui: &Ui, buf: &dyn TextBuffer, wrap: f32| {
                         let text = buf.as_str();
@@ -1491,112 +1578,24 @@ impl App {
                     let gx = out.galley_pos.x;
                     let at = |ci: usize| g.pos_from_cursor(CCursor::new(ci)).translate(o);
                     let painter = ui.painter();
-                    let mut bgs = vec![];
                     let pointer = ctx.input(|i| i.pointer.interact_pos());
                     let clicked = out.response.clicked();
-                    let mut toggle = None;
-                    for d in &cache.decos {
-                        match d {
-                            Deco::Code(a, b) => {
-                                let r = Rect::from_min_max(
-                                    pos2(gx - 10.0, at(*a).min.y - 2.0),
-                                    pos2(gx + col_w + 10.0, at(*b).max.y + 2.0),
-                                );
-                                bgs.push(Shape::rect_filled(r, 4.0, md::CODE_BG));
-                            }
-                            Deco::Quote { start, end, level, color } => {
-                                let (r1, r2) = (at(*start), at(*end));
-                                for k in 0..*level {
-                                    let x = gx + k as f32 * look.indent() + 1.0;
-                                    let r = Rect::from_min_max(pos2(x, r1.min.y), pos2(x + 2.0, r2.max.y));
-                                    painter.rect_filled(r, 0.0, color.unwrap_or(md::ACCENT));
-                                }
-                                if let Some(c) = color {
-                                    let r = Rect::from_min_max(pos2(gx, r1.min.y), pos2(gx + col_w, r2.max.y));
-                                    bgs.push(Shape::rect_filled(r, 0.0, c.gamma_multiply(0.1)));
-                                }
-                            }
-                            Deco::Math { ci, galley, boxed, display, shift } => {
-                                let r = at(*ci);
-                                let size = galley.size();
-                                let x = if *display {
-                                    gx + (col_w - size.x) / 2.0
-                                } else {
-                                    r.min.x - shift + if *boxed { 6.0 } else { 1.0 }
-                                };
-                                let pos = pos2(x, r.center().y - size.y / 2.0);
-                                painter.galley(pos, galley.clone(), md::TEXT);
-                                if *boxed {
-                                    let pad = if *display { vec2(12.0, 8.0) } else { vec2(4.0, 1.0) };
-                                    let frame = Rect::from_min_size(pos, size).expand2(pad);
-                                    painter.rect_stroke(
-                                        frame,
-                                        4.0,
-                                        Stroke::new(1.0, md::MUTED),
-                                        egui::StrokeKind::Outside,
-                                    );
-                                }
-                            }
-                            Deco::Hr(ci) => {
-                                let y = at(*ci).center().y;
-                                painter.hline(gx..=gx + col_w, y, Stroke::new(2.0, md::BORDER));
-                            }
-                            Deco::Bullet(ci) => {
-                                let r = at(*ci);
-                                let x = r.min.x - look.indent() * 0.5;
-                                painter.circle_filled(pos2(x, r.center().y), (look.size * 0.15).max(2.5), md::DIM);
-                            }
-                            Deco::Table { rows, widths, align } => paint_table(painter, gx, rows, widths, align, &at),
-                            Deco::Check { ci, byte, checked } => {
-                                let r = at(*ci);
-                                let side = (look.size * 1.0).round();
-                                let center = pos2(r.min.x - look.indent() * 0.55, r.center().y);
-                                let bx = Rect::from_center_size(center, vec2(side, side));
-                                if *checked {
-                                    painter.rect_filled(bx, 4.0, md::ACCENT);
-                                    let pts = [
-                                        bx.lerp_inside(vec2(0.22, 0.52)),
-                                        bx.lerp_inside(vec2(0.42, 0.72)),
-                                        bx.lerp_inside(vec2(0.78, 0.3)),
-                                    ];
-                                    painter.line(pts.to_vec(), Stroke::new(2.0, md::BG));
-                                } else {
-                                    painter.rect_stroke(bx, 4.0, Stroke::new(1.5, md::DIM), egui::StrokeKind::Inside);
-                                }
-                                if pointer.is_some_and(|p| bx.expand(3.0).contains(p)) {
-                                    ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
-                                    if clicked {
-                                        toggle = Some((*byte, *checked));
-                                    }
-                                }
-                            }
-                            Deco::Image { ci, src, size } => {
-                                let r = at(*ci);
-                                let tex = image_key(dir.as_deref(), src)
-                                    .and_then(|k| images.get(&k))
-                                    .and_then(|t| t.as_ref());
-                                if let Some((tex, _)) = tex {
-                                    let rect = Rect::from_min_size(pos2(r.min.x, r.min.y + 6.0), *size);
-                                    painter.image(
-                                        tex.id(),
-                                        rect,
-                                        Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)),
-                                        Color32::WHITE,
-                                    );
-                                }
-                            }
-                            Deco::Link { start, end, url } => {
-                                if clicked
-                                    && ctx.input(|i| i.modifiers.command)
-                                    && let Some(p) = pointer
-                                {
-                                    let c = g.cursor_from_pos(p - out.galley_pos).index.0;
-                                    if (*start..*end).contains(&c) {
-                                        clicked_link = Some(url.clone());
-                                    }
-                                }
-                            }
-                        }
+                    let mut bgs = vec![];
+                    let deco_cx = DecoCx {
+                        ctx: &ctx,
+                        painter,
+                        galley: g,
+                        pos: out.galley_pos,
+                        col_w,
+                        look: &look,
+                        images,
+                        pointer,
+                        clicked,
+                    };
+                    let events = paint_decos(&deco_cx, &cache.decos, &mut bgs);
+                    let toggle = events.toggle;
+                    if events.link.is_some() {
+                        clicked_link = events.link;
                     }
                     if let Some((a, b)) = find.as_ref().and_then(|f| f.hl) {
                         let (r1, r2) = (at(a), at(b));
@@ -1916,6 +1915,128 @@ impl App {
     }
 }
 
+/// What painting the decorations found out about the pointer.
+#[derive(Default)]
+struct DecoEvents {
+    /// A checkbox that was clicked: (byte of its `[ ]`/`[x]` mark, was checked).
+    toggle: Option<(usize, bool)>,
+    /// A link that was ctrl+clicked.
+    link: Option<String>,
+}
+
+/// Everything needed to paint the editor's decorations over its galley.
+struct DecoCx<'a> {
+    ctx: &'a Context,
+    painter: &'a egui::Painter,
+    galley: &'a Galley,
+    /// Where the galley was painted.
+    pos: Pos2,
+    col_w: f32,
+    look: &'a md::Look,
+    images: &'a HashMap<String, Option<(TextureHandle, Vec2)>>,
+    pointer: Option<Pos2>,
+    clicked: bool,
+}
+
+/// Paints bullets, checkboxes, quote bars, rules, tables, formulas, images…; backgrounds go to `bgs`
+/// (they are inserted behind the text by the caller).
+fn paint_decos(cx: &DecoCx, decos: &[Deco], bgs: &mut Vec<Shape>) -> DecoEvents {
+    let at = |ci: usize| cx.galley.pos_from_cursor(CCursor::new(ci)).translate(cx.pos.to_vec2());
+    let mut events = DecoEvents::default();
+    for d in decos {
+        match d {
+            Deco::Code(a, b) => {
+                let r = Rect::from_min_max(
+                    pos2(cx.pos.x - 10.0, at(*a).min.y - 2.0),
+                    pos2(cx.pos.x + cx.col_w + 10.0, at(*b).max.y + 2.0),
+                );
+                bgs.push(Shape::rect_filled(r, 4.0, md::CODE_BG));
+            }
+            Deco::Quote { start, end, level, color } => {
+                let (r1, r2) = (at(*start), at(*end));
+                for k in 0..*level {
+                    let x = cx.pos.x + k as f32 * cx.look.indent() + 1.0;
+                    let r = Rect::from_min_max(pos2(x, r1.min.y), pos2(x + 2.0, r2.max.y));
+                    cx.painter.rect_filled(r, 0.0, color.unwrap_or(md::ACCENT));
+                }
+                if let Some(c) = color {
+                    let r = Rect::from_min_max(pos2(cx.pos.x, r1.min.y), pos2(cx.pos.x + cx.col_w, r2.max.y));
+                    bgs.push(Shape::rect_filled(r, 0.0, c.gamma_multiply(0.1)));
+                }
+            }
+            Deco::Math { ci, galley, boxed, display, shift } => {
+                let r = at(*ci);
+                let size = galley.size();
+                let x = if *display {
+                    cx.pos.x + (cx.col_w - size.x) / 2.0
+                } else {
+                    r.min.x - shift + if *boxed { 6.0 } else { 1.0 }
+                };
+                let pos = pos2(x, r.center().y - size.y / 2.0);
+                cx.painter.galley(pos, galley.clone(), md::TEXT);
+                if *boxed {
+                    let pad = if *display { vec2(12.0, 8.0) } else { vec2(4.0, 1.0) };
+                    let frame = Rect::from_min_size(pos, size).expand2(pad);
+                    cx.painter.rect_stroke(frame, 4.0, Stroke::new(1.0, md::MUTED), egui::StrokeKind::Outside);
+                }
+            }
+            Deco::Hr(ci) => {
+                let y = at(*ci).center().y;
+                cx.painter.hline(cx.pos.x..=cx.pos.x + cx.col_w, y, Stroke::new(2.0, md::BORDER));
+            }
+            Deco::Bullet(ci) => {
+                let r = at(*ci);
+                let x = r.min.x - cx.look.indent() * 0.5;
+                cx.painter.circle_filled(pos2(x, r.center().y), (cx.look.size * 0.15).max(2.5), md::DIM);
+            }
+            Deco::Table { rows, widths, align } => paint_table(cx.painter, cx.pos.x, rows, widths, align, &at),
+            Deco::Check { ci, byte, checked } => {
+                let r = at(*ci);
+                let side = (cx.look.size * 1.0).round();
+                let center = pos2(r.min.x - cx.look.indent() * 0.55, r.center().y);
+                let bx = Rect::from_center_size(center, vec2(side, side));
+                if *checked {
+                    cx.painter.rect_filled(bx, 4.0, md::ACCENT);
+                    let pts = [
+                        bx.lerp_inside(vec2(0.22, 0.52)),
+                        bx.lerp_inside(vec2(0.42, 0.72)),
+                        bx.lerp_inside(vec2(0.78, 0.3)),
+                    ];
+                    cx.painter.line(pts.to_vec(), Stroke::new(2.0, md::BG));
+                } else {
+                    cx.painter.rect_stroke(bx, 4.0, Stroke::new(1.5, md::DIM), egui::StrokeKind::Inside);
+                }
+                if cx.pointer.is_some_and(|p| bx.expand(3.0).contains(p)) {
+                    cx.ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+                    if cx.clicked {
+                        events.toggle = Some((*byte, *checked));
+                    }
+                }
+            }
+            Deco::Image { ci, key, size } => {
+                let r = at(*ci);
+                let tex = cx.images.get(key).and_then(|t| t.as_ref());
+                if let Some((tex, _)) = tex {
+                    let rect = Rect::from_min_size(pos2(r.min.x, r.min.y + 6.0), *size);
+                    cx.painter.image(tex.id(), rect, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), Color32::WHITE);
+                }
+            }
+            Deco::Link { start, end, url } => {
+                if cx.clicked
+                    && cx.ctx.input(|i| i.modifiers.command)
+                    && let Some(p) = cx.pointer
+                {
+                    let c = cx.galley.cursor_from_pos(p - cx.pos).index.0;
+                    if (*start..*end).contains(&c) {
+                        events.link = Some(url.clone());
+                    }
+                }
+            }
+        }
+    }
+    events
+}
+
 /// Draws a markdown table over the hidden source lines (each line reserved its row's height).
 fn paint_table(
     painter: &egui::Painter,
@@ -2145,7 +2266,7 @@ impl eframe::App for App {
             || self.delete_file.is_some();
         let mut acts = vec![];
         if !modal_open {
-            for (m, k, a) in shortcuts() {
+            for &(m, k, a) in shortcuts() {
                 if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k))) {
                     acts.push(a);
                 }
@@ -2229,20 +2350,24 @@ impl eframe::App for App {
             ctx.send_viewport_cmd(ViewportCommand::Title(title.clone()));
             self.title = title;
         }
-        let font = (self.cfg.font.clone(), self.cfg.weight, self.cfg.bold_weight, self.cfg.lang);
-        if font != self.applied_font {
-            fonts::apply(&ctx, &font.0, font.1, font.2, font.3);
-            self.applied_font = font;
+        let (cfg, applied) = (&self.cfg, &self.applied_font);
+        if (&applied.0, applied.1, applied.2, applied.3) != (&cfg.font, cfg.weight, cfg.bold_weight, cfg.lang) {
+            fonts::apply(&ctx, &cfg.font, cfg.weight, cfg.bold_weight, cfg.lang);
+            self.applied_font = (cfg.font.clone(), cfg.weight, cfg.bold_weight, cfg.lang);
         }
-        if self.cfg.gamma != self.saved_cfg.gamma {
-            let g = self.cfg.gamma;
+        if self.cfg.gamma != self.applied_gamma {
+            self.applied_gamma = self.cfg.gamma;
+            let g = self.applied_gamma;
             ctx.style_mut_of(egui::Theme::Dark, |s| {
                 s.visuals.text_options.color_transfer_function = FontColorTransferFunction::Gamma(g);
             });
         }
+        self.save_config_soon(&ctx);
+    }
+
+    fn on_exit(&mut self) {
         if self.cfg != self.saved_cfg {
             self.cfg.save();
-            self.saved_cfg = self.cfg.clone();
         }
     }
 }
@@ -2252,9 +2377,60 @@ mod tests {
     use super::*;
 
     #[test]
+    fn settings_round_trip_and_reject_bad_values() {
+        let custom = Config { lang: Lang::German, size: 20.5, weight: 400, files: true, ..Config::default_text() };
+        assert!(custom == Config::default_text().parse(&custom.to_text()));
+        let broken =
+            Config::default_text().parse("size=0\nweight=5000\ngamma=nan\nline_height=abc\nunknown=1\nlang=xx");
+        assert!(broken == Config::default_text(), "invalid values keep the defaults");
+        assert_eq!(Config::default_text().parse("pl=1").lang, Lang::Polish, "old settings files still work");
+    }
+
+    #[test]
+    fn huge_images_are_scaled_to_fit_a_texture_and_absurd_ones_refused() {
+        let ctx = Context::default();
+        let encode = |w, h| {
+            let mut png = Vec::new();
+            image::DynamicImage::new_rgb8(w, h)
+                .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+                .unwrap();
+            format!("data:image/png;base64,{}", base64::encode(&png))
+        };
+        let (_, size) = load_image(&ctx, None, &encode(9000, 30)).expect("a wide image loads");
+        assert!(size.x <= MAX_TEXTURE_SIDE as f32 && size.x > 0.0 && size.y >= 1.0);
+        assert!(load_image(&ctx, None, &encode(20_000, 4)).is_none(), "wider than the decoder limit");
+    }
+
+    #[test]
+    fn only_web_links_are_opened_and_never_programs() {
+        assert_eq!(url_scheme("https://example.com"), Some("https"));
+        assert_eq!(url_scheme("mailto:a@b.c"), Some("mailto"));
+        assert_eq!(url_scheme("C:\\Users\\x.md"), None, "a drive letter is not a scheme");
+        assert_eq!(url_scheme("notes/a.md"), None);
+        assert!(runs_code(Path::new("setup.EXE")));
+        assert!(runs_code(Path::new("run.sh")));
+        assert!(!runs_code(Path::new("/nonexistent/photo.png")));
+    }
+
+    #[test]
+    fn crlf_files_keep_their_line_endings() {
+        let dir = std::env::temp_dir().join(format!("mdedit-crlf-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.md");
+        std::fs::write(&path, "one\r\ntwo\r\n").unwrap();
+        let (mut app, _ctx) = app_with("");
+        app.open_path(path.clone());
+        assert_eq!(app.docs[0].text, "one\ntwo\n");
+        app.docs[0].text.push_str("three");
+        assert!(app.save(0, false));
+        assert_eq!(std::fs::read(&path).unwrap(), b"one\r\ntwo\r\nthree");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn about_lists_every_shortcut() {
         let covered: Vec<Action> = about_rows(Lang::English).into_iter().flat_map(|r| r.covers).collect();
-        for (m, k, a) in shortcuts() {
+        for &(m, k, a) in shortcuts() {
             assert!(covered.contains(&a), "About is missing {} ({})", shortcut_label(m, k), k.name());
         }
     }
@@ -2508,6 +2684,37 @@ mod tests {
         assert!(!decos.iter().any(|d| matches!(d, Deco::Table { .. })), "raw source while editing");
     }
 
+    /// Random mixes of Markdown syntax and multi-byte characters must lay out without panicking
+    /// (the parser slices strings at byte offsets).
+    #[test]
+    fn layout_survives_random_markdown() {
+        const TOKENS: &[&str] = &[
+            "*", "**", "_", "`", "```", "~~~", "[", "]", "(", ")", "!", "#", "##", ">", "> ", "-", "- ", "- [ ] ",
+            "1. ", "|", "|-", ":", "$", "$$", "\\", "\\[", "\\(", "~~", "==", "^", "%%", "<", "[^1]", "[^1]:", "[[",
+            "]]", "![", "](", "http://x", "#tag", "[!note]", "---", "ą", "ż", "日本", "€", "🙂", "\n", "\n", " ", " ",
+            "a", "word", "1", "\t",
+        ];
+        let ctx = Context::default();
+        fonts::apply(&ctx, "", 300, 600, Lang::English);
+        let _ = ctx.run_ui(RawInput::default(), |_| {});
+        let mut layout = |job| ctx.fonts_mut(|f| f.layout_job(job));
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        // `FUZZ_ITERS=1000000 cargo test` runs it much longer.
+        let iterations = std::env::var("FUZZ_ITERS").ok().and_then(|n| n.parse().ok()).unwrap_or(4000);
+        for _ in 0..iterations {
+            let text: String = (0..(next() % 40) + 1).map(|_| TOKENS[(next() as usize) % TOKENS.len()]).collect();
+            let chars = text.chars().count();
+            let cursor = (next() % 3 != 0).then(|| (next() as usize) % (chars + 1));
+            let _ = md::build(&text, cursor, 300.0, &LOOK, 1.0, &mut |_| None, &mut layout);
+        }
+    }
+
     #[test]
     fn long_table_cells_wrap_and_rows_grow() {
         let long = "word ".repeat(40);
@@ -2526,18 +2733,9 @@ mod tests {
     fn markers_hidden_except_on_cursor_line() {
         let text = "**a**\n**b**";
         let (galley, _) = layout(text, Some(8), 500.0);
-        let job = &galley.job;
-        let hidden = |byte: usize| {
-            job.sections
-                .iter()
-                .find(|s| s.byte_range.start.0 <= byte && byte < s.byte_range.end.0)
-                .unwrap()
-                .format
-                .color
-                == Color32::TRANSPARENT
-        };
-        assert!(hidden(0), "markers on other lines are hidden");
-        assert!(!hidden(6), "markers on the cursor line are shown");
+        // Hidden markers take no room: the first row is just "a", the cursor line shows "**b**".
+        let (hidden, shown) = (galley.rows[0].size.x, galley.rows[1].size.x);
+        assert!(hidden < shown * 0.5, "markers on other lines are hidden ({hidden} vs {shown})");
     }
 
     #[test]

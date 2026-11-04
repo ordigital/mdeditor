@@ -91,9 +91,10 @@ pub enum Deco {
         color: Option<Color32>,
     },
     Code(usize, usize),
+    /// `key` identifies the loaded image (computed once by the `img_size` callback).
     Image {
         ci: usize,
-        src: String,
+        key: String,
         size: Vec2,
     },
     Link {
@@ -374,7 +375,7 @@ struct Cx<'a> {
     look: &'a Look,
     wrap: f32,
     decos: Vec<Deco>,
-    img_size: &'a mut dyn FnMut(&str) -> Option<Vec2>,
+    img_size: &'a mut dyn FnMut(&str) -> Option<(String, Vec2)>,
     layout: &'a mut dyn FnMut(LayoutJob) -> Arc<Galley>,
     /// Color of the callout the current quote block belongs to.
     callout: Option<Color32>,
@@ -397,7 +398,7 @@ impl Cx<'_> {
 }
 
 /// Lays out `text` with egui's `layout` function. `cursor` is the char index of the text cursor
-/// (its line shows raw markers). `img_size` returns the natural size of an image used by the document.
+/// (its line shows raw markers). `img_size` returns the cache key and natural size of an image used by the document.
 #[allow(clippy::too_many_arguments)]
 pub fn build(
     text: &str,
@@ -405,7 +406,7 @@ pub fn build(
     wrap: f32,
     look: &Look,
     pixels_per_point: f32,
-    img_size: &mut dyn FnMut(&str) -> Option<Vec2>,
+    img_size: &mut dyn FnMut(&str) -> Option<(String, Vec2)>,
     layout: &mut dyn FnMut(LayoutJob) -> Arc<Galley>,
 ) -> (Arc<Galley>, Vec<Deco>) {
     let mut job = LayoutJob { text: text.to_owned(), ..Default::default() };
@@ -555,6 +556,7 @@ pub fn build(
             s.spacing = 0.0;
             st[n] = s;
         }
+        // The merged galley needs the sections too: egui reads text formats from them when painting.
         push_sections(&mut job, &st, byte0, look);
 
         // Each line is laid out as its own paragraph (like egui does internally), so that
@@ -773,7 +775,8 @@ fn inline_math(s: &str, i: usize) -> Option<(usize, usize, usize)> {
     }
     let mut j = from + 1;
     while j + close.len() <= b.len() {
-        if s[j..].starts_with(close) && b[j - 1] != b'\\' {
+        // Compare bytes: `j` may sit inside a multi-byte character.
+        if b[j..].starts_with(close.as_bytes()) && b[j - 1] != b'\\' {
             if open == "$" && (b[j - 1].is_ascii_whitespace() || b.get(j + 1).is_some_and(|c| c.is_ascii_digit())) {
                 return None;
             }
@@ -870,16 +873,16 @@ fn inline(cx: &mut Cx, s: &str, from: usize, rev: bool, st: &mut [St], ci0: usiz
                 };
                 match found {
                     Some((src, width, cl, data)) => {
-                        let size = (cx.img_size)(&src);
-                        match size {
-                            Some(sz) if !rev => {
+                        let loaded = (cx.img_size)(&src);
+                        match loaded {
+                            Some((key, sz)) if !rev => {
                                 let w = width.unwrap_or(sz.x).min(sz.x).min(cx.wrap - 4.0).max(1.0);
                                 let size = Vec2::new(w, sz.y * w / sz.x);
                                 // Only the first hidden char reserves the image's height: a long `data:` URI
                                 // wraps over many rows, and every row would otherwise get that height.
                                 st[i..=cl].fill(St { hidden: true, ..St::default() });
                                 st[i].lh = size.y as u16 + 12;
-                                cx.decos.push(Deco::Image { ci: ci(i), src, size });
+                                cx.decos.push(Deco::Image { ci: ci(i), key, size });
                             }
                             _ => {
                                 st[i..=cl].iter_mut().for_each(|x| x.dim = true);

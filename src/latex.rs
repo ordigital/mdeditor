@@ -1,6 +1,9 @@
 //! A small LaTeX-math to Unicode converter, good enough to display typical formulas
 //! (`\frac`, `\sqrt`, `\text`, `\boxed`, Greek letters, operators, simple sub/superscripts).
 
+/// Nesting deeper than this is dropped (the parser recurses, so unbounded input could overflow the stack).
+const MAX_DEPTH: usize = 48;
+
 /// Converts LaTeX math to plain Unicode text. Returns the text and whether the formula
 /// was wrapped in `\boxed{…}` at the top level.
 pub fn to_unicode(src: &str) -> (String, bool) {
@@ -22,6 +25,10 @@ impl Parser {
 
     /// Atoms until `end` (consumed) or the end of input.
     fn seq(&mut self, end: Option<char>, depth: usize) -> String {
+        if depth > MAX_DEPTH {
+            self.i = self.c.len();
+            return String::new();
+        }
         let mut out = String::new();
         while let Some(c) = self.peek() {
             if Some(c) == end {
@@ -35,6 +42,10 @@ impl Parser {
 
     /// A `{…}` group or a single atom (an argument of a command).
     fn group(&mut self, depth: usize) -> String {
+        if depth > MAX_DEPTH {
+            self.i = self.c.len();
+            return String::new();
+        }
         while self.peek() == Some(' ') {
             self.i += 1;
         }
@@ -369,6 +380,36 @@ fn collapse_spaces(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::to_unicode;
+
+    #[test]
+    fn deep_nesting_does_not_overflow_the_stack() {
+        let deep = "{".repeat(200_000) + "x" + &"}".repeat(200_000);
+        let _ = to_unicode(&deep);
+        let _ = to_unicode(&"\\frac".repeat(100_000));
+        let _ = to_unicode(&"^{_{".repeat(100_000));
+    }
+
+    #[test]
+    fn random_input_does_not_panic() {
+        const TOKENS: &[&str] = &[
+            "\\frac", "\\sqrt", "\\sqrt[", "\\text", "{", "}", "^", "_", "[", "]", "x", "2", "\\", " ", "ż", "\\boxed",
+            "\\mathbb", "&", "\\left", ".",
+        ];
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        for _ in 0..20_000 {
+            let mut text = String::new();
+            for _ in 0..(seed % 30) {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                text += TOKENS[(seed as usize) % TOKENS.len()];
+            }
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let _ = to_unicode(&text);
+        }
+    }
 
     #[test]
     fn converts_common_formulas() {

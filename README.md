@@ -22,6 +22,7 @@ Polish version: [README.pl.md](README.pl.md).
 - Defaults from Obsidian's dark theme: Inter (text) and Source Code Pro (code), both embedded;
   UI in the desktop font (KDE / GNOME settings, Noto Sans 10 as fallback).
 - Binary and very large files (over 5 MB) are refused instead of freezing the editor.
+- Windows line endings (CRLF) are kept when saving. Ctrl+click opens only web and mail links, and never programs or scripts.
 
 `examples/example.md` (English) and `examples/przyklad.md` (Polish) show every supported element.
 
