@@ -20,7 +20,6 @@ pub enum Lang {
     Hungarian,
     Italian,
     Japanese,
-    Kashubian,
     Lithuanian,
     Polish,
     Portuguese,
@@ -34,7 +33,7 @@ pub enum Lang {
 }
 
 impl Lang {
-    pub const ALL: [Lang; 24] = [
+    pub const ALL: [Lang; 23] = [
         Lang::Arabic,
         Lang::Bengali,
         Lang::Chinese,
@@ -48,7 +47,6 @@ impl Lang {
         Lang::Hungarian,
         Lang::Italian,
         Lang::Japanese,
-        Lang::Kashubian,
         Lang::Lithuanian,
         Lang::Polish,
         Lang::Portuguese,
@@ -61,7 +59,7 @@ impl Lang {
         Lang::Urdu,
     ];
 
-    /// ISO 639-1 code (Kashubian has none: its ISO 639-2 code is `csb`).
+    /// ISO 639-1 code.
     pub fn code(self) -> &'static str {
         match self {
             Lang::Arabic => "ar",
@@ -77,7 +75,6 @@ impl Lang {
             Lang::Hungarian => "hu",
             Lang::Italian => "it",
             Lang::Japanese => "ja",
-            Lang::Kashubian => "csb",
             Lang::Lithuanian => "lt",
             Lang::Polish => "pl",
             Lang::Portuguese => "pt",
@@ -107,7 +104,6 @@ impl Lang {
             Lang::Hungarian => "Magyar",
             Lang::Italian => "Italiano",
             Lang::Japanese => "日本語",
-            Lang::Kashubian => "Kaszëbsczi",
             Lang::Lithuanian => "Lietuvių",
             Lang::Polish => "Polski",
             Lang::Portuguese => "Português",
@@ -136,7 +132,6 @@ impl Lang {
                 | Lang::Greek
                 | Lang::Hungarian
                 | Lang::Italian
-                | Lang::Kashubian
                 | Lang::Lithuanian
                 | Lang::Polish
                 | Lang::Portuguese
@@ -199,7 +194,6 @@ fn source(lang: Lang) -> &'static str {
         Lang::Hungarian => HU,
         Lang::Italian => IT,
         Lang::Japanese => JA,
-        Lang::Kashubian => CSB,
         Lang::Lithuanian => LT,
         Lang::Polish => PL,
         Lang::Portuguese => PT,
@@ -1563,18 +1557,6 @@ Save the file first to paste images.|Pirma įrašykite failą, kad galėtumėte 
 Error|Klaida
 "#;
 
-const CSB: &str = r#"
-File|Plik
-Files|Pliczi
-Find|Szëkac
-Next|Dalszi
-Cancel|Anulowac
-Error|Bléd
-Language|Jãzëk
-Recent|Ostatnié
-Untitled|Bez miona
-"#;
-
 const JA: &str = r#"
 File|ファイル
 Open…|開く…
@@ -2214,8 +2196,6 @@ mod tests {
         assert_eq!(tr(Lang::German, "Save"), "Speichern");
         assert_eq!(tr(Lang::Polish, "Save"), "Zapisz");
         assert_eq!(tr(Lang::English, "Save"), "Save");
-        // Not translated yet: shown in English.
-        assert_eq!(tr(Lang::Kashubian, "Bold"), "Bold");
         assert_eq!(tr(Lang::Chinese, "No such key"), "No such key");
     }
 
@@ -2235,7 +2215,6 @@ mod tests {
     fn locale_codes_map_to_languages() {
         assert_eq!(Lang::from_code("pl_PL.UTF-8"), Some(Lang::Polish));
         assert_eq!(Lang::from_code("zh_CN"), Some(Lang::Chinese));
-        assert_eq!(Lang::from_code("csb"), Some(Lang::Kashubian));
         assert_eq!(Lang::from_code("xx"), None);
     }
 

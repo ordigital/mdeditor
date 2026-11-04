@@ -1,6 +1,6 @@
 # MDEdit
 
-Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyciem [egui](https://github.com/emilk/egui). Działa jak podgląd na żywo w Obsidianie: znaczniki są ukryte wszędzie poza linią, w której stoi kursor, więc `# Tytuł` staje się nagłówkiem, gdy tylko przesuniesz kursor dalej. Tylko ciemny motyw. Interfejs jest dostępny w 24 językach (wybór w Preferencjach).
+Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyciem [egui](https://github.com/emilk/egui). Działa jak podgląd na żywo w Obsidianie: znaczniki są ukryte wszędzie poza linią, w której stoi kursor, więc `# Tytuł` staje się nagłówkiem, gdy tylko przesuniesz kursor dalej. Tylko ciemny motyw. Interfejs jest dostępny w 23 językach (wybór w Preferencjach).
 
 ![MDEdit](docs/screenshot.png)
 
