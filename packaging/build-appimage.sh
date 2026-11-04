@@ -12,12 +12,12 @@ out="$root/releases/MDEdit-$version-x86_64.AppImage"
 mkdir -p "$work/target"
 
 docker run --rm \
-    -v "$root":/src:ro -v "$work/target":/target -v mdedit-cargo:/root/.cargo \
+    -v "$root":/src:ro -v "$work/target":/target -v mdedit-cargo:/root/.cargo -v mdedit-rustup:/root/.rustup \
     -e CARGO_TARGET_DIR=/target -e CARGO_TERM_COLOR=never \
     ubuntu:22.04 sh -eu -c '
         apt-get update -qq
         DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates curl build-essential pkg-config
-        [ -x /root/.cargo/bin/cargo ] || curl -sSf https://sh.rustup.rs | sh -s -- -y -q --profile minimal --default-toolchain stable
+        /root/.cargo/bin/cargo --version >/dev/null 2>&1 || curl -sSf https://sh.rustup.rs | sh -s -- -y -q --profile minimal --default-toolchain stable
         . /root/.cargo/env
         cd /src
         cargo build --release --locked
