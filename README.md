@@ -2,6 +2,8 @@
 
 A fast, minimal **WYSIWYG Markdown editor** written in Rust with [egui](https://github.com/emilk/egui). It works like Obsidian's live preview: markers are hidden everywhere except on the line with the cursor, so `# Title` becomes a heading as soon as you move away from it. Dark mode only, English and Polish UI.
 
+Polish version: [README.pl.md](README.pl.md).
+
 ![MDEdit](docs/screenshot.png)
 
 ## Features
