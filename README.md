@@ -21,6 +21,8 @@ Polish version: [README.pl.md](README.pl.md).
 - Linux primary selection: select text, paste with the middle mouse button or Shift+Insert.
 - Defaults from Obsidian's dark theme: Inter (text) and Source Code Pro (code), both embedded;
   UI in the desktop font (KDE / GNOME settings, Noto Sans 10 as fallback).
+- Config files are shown as syntax-colored plain text, chosen by extension: XML, TOML, JSON, YAML, INI/CFG/CONF and `.env`.
+  Markdown files are not affected.
 - Binary and very large files (over 5 MB) are refused instead of freezing the editor.
 - Windows line endings (CRLF) are kept when saving. Ctrl+click opens only web and mail links, and never programs or scripts.
 
@@ -88,6 +90,7 @@ Settings are stored in `~/.config/mdedit/config`, recent files in `~/.config/mde
 | `src/app.rs` | the application: menus, tabs, editor, dialogs, undo, settings |
 | `src/md.rs` | Markdown to styled text layout and decorations |
 | `src/latex.rs` | LaTeX math to Unicode |
+| `src/highlight.rs` | syntax coloring of config files |
 | `src/files.rs` | file panel |
 | `src/fonts.rs` | font loading (embedded Inter / Source Code Pro, system fonts via fontconfig) |
 | `src/base64.rs`, `src/i18n.rs` | base64 for embedded images, English / Polish strings |

@@ -46,7 +46,7 @@ pub const CODE: Color32 = Color32::from_rgb(0xe6, 0xb4, 0x8a);
 pub const CODE_BG: Color32 = Color32::from_rgb(0x23, 0x23, 0x23);
 pub const BORDER: Color32 = Color32::from_rgb(0x33, 0x33, 0x33);
 const MARK_BG: Color32 = Color32::from_rgb(0x55, 0x1d, 0x42);
-const TAG: Color32 = Color32::from_rgb(0x38, 0xb3, 0x5c);
+pub const TAG: Color32 = Color32::from_rgb(0x38, 0xb3, 0x5c);
 
 pub fn heading_size(level: u8, look: &Look) -> f32 {
     let scale = match level {

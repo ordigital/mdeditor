@@ -5,6 +5,7 @@ mod app;
 mod base64;
 mod files;
 mod fonts;
+mod highlight;
 mod i18n;
 mod latex;
 mod md;

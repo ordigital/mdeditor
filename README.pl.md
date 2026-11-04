@@ -16,6 +16,8 @@ Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyc
 - **Jedna instancja** (Linux): ponowne uruchomienie `mdedit plik.md` otwiera plik w nowej karcie działającego okna.
 - Schowek zaznaczenia w Linuksie: zaznacz tekst, wklej środkowym przyciskiem myszy albo Shift+Insert.
 - Domyślne ustawienia z ciemnego motywu Obsidiana: czcionki Inter (tekst) i Source Code Pro (kod), obie wbudowane. Interfejs używa czcionki systemowej (ustawienia KDE / GNOME, zapasowo Noto Sans 10).
+- Pliki konfiguracyjne są pokazywane jako kolorowany tekst, zależnie od rozszerzenia: XML, TOML, JSON, YAML, INI/CFG/CONF i `.env`.
+  Pliki Markdown pozostają bez zmian.
 - Pliki binarne i bardzo duże (ponad 5 MB) są odrzucane, zamiast zamrażać edytor.
 - Końce linii Windows (CRLF) są zachowywane przy zapisie. Ctrl+klik otwiera tylko linki internetowe i pocztowe, nigdy programów ani skryptów.
 
@@ -80,6 +82,7 @@ Ustawienia są w `~/.config/mdedit/config`, ostatnie pliki w `~/.config/mdedit/r
 | `src/app.rs` | aplikacja: menu, karty, edytor, okna dialogowe, cofanie, ustawienia |
 | `src/md.rs` | układ Markdown do stylizowanego tekstu i dekoracje |
 | `src/latex.rs` | zamiana wzorów LaTeX na Unicode |
+| `src/highlight.rs` | kolorowanie plików konfiguracyjnych |
 | `src/files.rs` | panel plików |
 | `src/fonts.rs` | ładowanie czcionek (wbudowane Inter / Source Code Pro, czcionki systemowe przez fontconfig) |
 | `src/base64.rs`, `src/i18n.rs` | base64 dla osadzonych obrazów, teksty po angielsku i po polsku |

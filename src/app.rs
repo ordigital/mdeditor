@@ -15,6 +15,7 @@ use eframe::egui::{
 use crate::base64;
 use crate::files;
 use crate::fonts;
+use crate::highlight::{self, Syntax};
 use crate::i18n::{Lang, tr};
 use crate::md::{self, Deco};
 use eframe::egui::epaint::FontColorTransferFunction;
@@ -85,6 +86,8 @@ struct Doc {
     undo: Vec<String>,
     redo: Vec<String>,
     last_edit: f64,
+    /// Config files (JSON, YAML, …) are shown as colored plain text instead of Markdown.
+    syntax: Option<Syntax>,
     /// The file used Windows line endings; they are restored when saving (the text is kept as `\n`).
     crlf: bool,
     /// (characters, words), recomputed only after the text changed.
@@ -95,6 +98,7 @@ impl Doc {
     fn new(id: u64, path: Option<PathBuf>, text: String) -> Self {
         Self {
             id,
+            syntax: path.as_deref().and_then(Syntax::from_path),
             path,
             saved: text.clone(),
             prev: text.clone(),
@@ -781,6 +785,7 @@ impl App {
             if p.extension().is_none() {
                 p.set_extension("md");
             }
+            doc.syntax = Syntax::from_path(&p);
             doc.path = Some(p.clone());
             self.add_recent(&p);
         }
@@ -862,7 +867,7 @@ impl App {
     /// Enter continues a list or quote (or ends it on an empty item); Tab / Shift+Tab indent list items.
     fn list_keys(&mut self, ctx: &Context) {
         let Some(doc) = self.docs.get(self.active) else { return };
-        if !ctx.memory(|m| m.has_focus(doc.edit_id())) {
+        if doc.syntax.is_some() || !ctx.memory(|m| m.has_focus(doc.edit_id())) {
             return;
         }
         let Some((a, b)) = self.selection(ctx) else { return };
@@ -1268,7 +1273,10 @@ impl App {
                     self.open_path(p);
                 }
             }
-            Action::Fmt(f) if !self.docs.is_empty() => self.apply_fmt(ctx, f),
+            // Markdown formatting makes no sense in a config file.
+            Action::Fmt(f) if self.docs.get(self.active).is_some_and(|d| d.syntax.is_none()) => {
+                self.apply_fmt(ctx, f);
+            }
             _ => {}
         }
     }
@@ -1475,6 +1483,7 @@ impl App {
         let doc = &mut docs[*active];
         let id = doc.edit_id();
         let dir = doc.dir();
+        let syntax = doc.syntax;
         let gutter = if cfg.line_numbers { 48.0 } else { 0.0 };
         let full = ui.available_width();
         let col_w = if cfg.optimize { (full - gutter - 48.0).min(MAX_LINE_W) } else { full - gutter - 48.0 }.max(100.0);
@@ -1525,13 +1534,16 @@ impl App {
                         let l = &look;
                         (text, line, wrap.to_bits(), ppp.to_bits(), l.size.to_bits(), l.line_height.to_bits())
                             .hash(&mut h);
-                        (l.weight, l.bold_weight, l.code_weight, &font).hash(&mut h);
+                        (l.weight, l.bold_weight, l.code_weight, &font, syntax).hash(&mut h);
                         let key = h.finish();
                         if let Some(c) = cache.as_ref().filter(|c| c.key == key) {
                             return c.galley.clone();
                         }
                         let mut layout = |job| ui.ctx().fonts_mut(|f| f.layout_job(job));
-                        let (galley, decos) = md::build(text, cursor_ci, wrap, &look, ppp, &mut img_size, &mut layout);
+                        let (galley, decos) = match syntax {
+                            Some(syntax) => (highlight::build(text, syntax, wrap, &look, ppp, &mut layout), vec![]),
+                            None => md::build(text, cursor_ci, wrap, &look, ppp, &mut img_size, &mut layout),
+                        };
                         *cache = Some(Cache { key, line, galley: galley.clone(), decos });
                         galley
                     };
