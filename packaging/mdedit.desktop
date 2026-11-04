@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=MDEdit
+GenericName=Markdown editor
+Comment=WYSIWYG Markdown editor
+Exec=mdedit %F
+Icon=mdedit
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/markdown;text/x-markdown;
+StartupWMClass=mdedit
