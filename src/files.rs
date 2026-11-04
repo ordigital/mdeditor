@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui::{self, RichText, Ui};
 
-use crate::i18n::tr;
+use crate::i18n::{Lang, tr};
 use crate::md;
 
 /// Files larger than this are not opened.
@@ -54,7 +54,7 @@ impl Browser {
 
     /// Shows the panel: a header (folder name opens a folder picker, × closes the panel)
     /// and the listing, where a click enters a folder or opens a file.
-    pub fn ui(&mut self, ui: &mut Ui, open: &[&Path], active: Option<&Path>, pl: bool) -> Option<Event> {
+    pub fn ui(&mut self, ui: &mut Ui, open: &[&Path], active: Option<&Path>, lang: Lang) -> Option<Event> {
         self.refresh(ui.input(|i| i.time));
         let name =
             self.dir.file_name().map_or_else(|| self.dir.display().to_string(), |n| n.to_string_lossy().into_owned());
@@ -88,7 +88,7 @@ impl Browser {
         egui::ScrollArea::vertical().auto_shrink(false).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 1.0;
             ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
-                if row(ui, &format!("+  {}", tr(pl, "Create new")), md::LINK, false).clicked() {
+                if row(ui, &format!("+  {}", tr(lang, "Create new")), md::LINK, false).clicked() {
                     event = Some(Event::New);
                 }
                 if let Some(parent) = self.dir.parent()
@@ -108,7 +108,7 @@ impl Browser {
                             let icon =
                                 egui::Rect::from_min_max(egui::pos2(r.rect.max.x - 26.0, r.rect.min.y), r.rect.max);
                             let del = egui::Button::new(RichText::new("🗑").color(md::MUTED)).frame(false);
-                            let del = ui.put(icon, del).on_hover_text(tr(pl, "Delete…"));
+                            let del = ui.put(icon, del).on_hover_text(tr(lang, "Delete…"));
                             if del.clicked() {
                                 event = Some(Event::Delete(path.clone()));
                             }

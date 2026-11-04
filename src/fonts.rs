@@ -7,6 +7,8 @@ use std::sync::Arc;
 
 use eframe::egui::{Context, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 
+use crate::i18n::Lang;
+
 /// Name shown for the embedded editor font (stored as an empty string in the config).
 pub const BUILTIN: &str = "Inter (built-in)";
 
@@ -71,6 +73,34 @@ fn fc_weight(css: u16) -> u16 {
 
 /// Font file for `family`, optionally with a CSS weight and italic.
 /// For italic, returns None when fontconfig only has an upright face at that weight.
+/// A system font that has the glyphs of `lang`'s script, if the language needs one.
+fn script_fallback(lang: Lang) -> Option<FontData> {
+    if cfg!(windows) {
+        let candidates: &[&str] = match lang {
+            Lang::Chinese => &[r"C:\Windows\Fonts\msyh.ttc"],
+            Lang::Japanese => &[r"C:\Windows\Fonts\meiryo.ttc"],
+            Lang::Arabic | Lang::Urdu | Lang::Hebrew => &[r"C:\Windows\Fonts\arial.ttf"],
+            Lang::Hindi | Lang::Bengali => &[r"C:\Windows\Fonts\Nirmala.ttf"],
+            _ => &[],
+        };
+        return candidates.iter().find_map(|path| std::fs::read(path).ok().map(FontData::from_owned));
+    }
+    let tag = match lang {
+        Lang::Chinese => "zh-cn",
+        Lang::Japanese => "ja",
+        Lang::Arabic | Lang::Urdu => "ar",
+        Lang::Hebrew => "he",
+        Lang::Hindi => "hi",
+        Lang::Bengali => "bn",
+        _ => return None,
+    };
+    let out = cmd("fc-match", &["-f", "%{file}|%{index}", &format!(":lang={tag}")])?;
+    let (file, index) = out.split_once('|')?;
+    let mut data = FontData::from_owned(std::fs::read(file).ok()?);
+    data.index = index.parse().unwrap_or(0);
+    Some(data)
+}
+
 fn fc_match(family: &str, weight: Option<u16>, italic: bool) -> Option<FontData> {
     let mut pattern: String =
         family.chars().flat_map(|c| if "-:,\\".contains(c) { vec!['\\', c] } else { vec![c] }).collect();
@@ -105,7 +135,7 @@ fn fc_styled(family: &str, weight: u16, italic: bool) -> Option<FontData> {
 
 /// Installs the fonts. `editor` is a fontconfig family or "" for the embedded Inter;
 /// `weight` and `bold` are CSS weights of normal and bold editor text.
-pub fn apply(ctx: &Context, editor: &str, weight: u16, bold: u16) {
+pub fn apply(ctx: &Context, editor: &str, weight: u16, bold: u16, lang: Lang) {
     let mut fonts = FontDefinitions::default();
     let emoji = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
     let mut add = |name: &str, data: FontData| {
@@ -128,7 +158,10 @@ pub fn apply(ctx: &Context, editor: &str, weight: u16, bold: u16) {
     let chain = |first: Option<&str>, fallback: &str| {
         first.into_iter().chain([fallback]).map(str::to_owned).chain(emoji.iter().cloned()).collect::<Vec<_>>()
     };
-    fonts.families.insert(FontFamily::Proportional, chain(ui, "inter"));
+    // Glyphs the built-in fonts lack (CJK, Arabic, Hebrew, Indic scripts) come from a system font.
+    let script = script_fallback(lang).map(|d| add("script", d)).map(|_| "script");
+    let proportional = ui.into_iter().chain(["inter"]).chain(script).map(str::to_owned);
+    fonts.families.insert(FontFamily::Proportional, proportional.chain(emoji.iter().cloned()).collect());
     fonts.families.insert(FontFamily::Monospace, chain(None, "code"));
     for ((name, fallback), font) in ["ed", "b", "i", "bi"].into_iter().zip(fallbacks).zip(editor_fonts) {
         fonts.families.insert(FontFamily::Name(name.into()), chain(font, fallback));

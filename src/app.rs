@@ -15,7 +15,7 @@ use eframe::egui::{
 use crate::base64;
 use crate::files;
 use crate::fonts;
-use crate::i18n::tr;
+use crate::i18n::{Lang, tr};
 use crate::md::{self, Deco};
 use eframe::egui::epaint::FontColorTransferFunction;
 
@@ -158,16 +158,16 @@ impl Doc {
     fn dirty(&self) -> bool {
         self.text != self.saved
     }
-    fn title(&self, pl: bool) -> String {
+    fn title(&self, lang: Lang) -> String {
         match self.path.as_ref().and_then(|p| p.file_name()) {
             Some(n) => n.to_string_lossy().into_owned(),
-            None => tr(pl, "Untitled").to_owned(),
+            None => tr(lang, "Untitled").to_owned(),
         }
     }
-    fn stem(&self, pl: bool) -> String {
+    fn stem(&self, lang: Lang) -> String {
         match self.path.as_ref().and_then(|p| p.file_stem()) {
             Some(n) => n.to_string_lossy().into_owned(),
-            None => tr(pl, "Untitled").to_owned(),
+            None => tr(lang, "Untitled").to_owned(),
         }
     }
     fn dir(&self) -> Option<PathBuf> {
@@ -177,7 +177,7 @@ impl Doc {
 
 #[derive(Clone, PartialEq)]
 struct Config {
-    pl: bool,
+    lang: Lang,
     optimize: bool,
     line_numbers: bool,
     inline_title: bool,
@@ -207,7 +207,7 @@ impl Config {
     /// Default text settings (also restored by the Reset button in Preferences).
     fn default_text() -> Self {
         Config {
-            pl: false,
+            lang: Lang::English,
             optimize: true,
             line_numbers: false,
             inline_title: true,
@@ -240,10 +240,8 @@ impl Config {
     }
 
     fn load() -> Self {
-        let lang =
-            ["LC_ALL", "LC_MESSAGES", "LANG"].iter().find_map(|v| std::env::var(v).ok().filter(|s| !s.is_empty()));
         let mut c = Config {
-            pl: lang.is_some_and(|l| l.starts_with("pl")),
+            lang: Lang::from_env(),
             optimize: true,
             line_numbers: false,
             inline_title: true,
@@ -256,7 +254,9 @@ impl Config {
             if let Some((k, v)) = l.split_once('=') {
                 let (v, on) = (v.trim(), v.trim() == "1");
                 match k.trim() {
-                    "pl" => c.pl = on,
+                    "lang" => c.lang = Lang::from_code(v).unwrap_or(c.lang),
+                    // Settings files from before the language menu.
+                    "pl" => c.lang = if on { Lang::Polish } else { c.lang },
                     "optimize" => c.optimize = on,
                     "line_numbers" => c.line_numbers = on,
                     "inline_title" => c.inline_title = on,
@@ -293,8 +293,8 @@ impl Config {
         let Some(p) = Self::path() else { return };
         let b = |v: bool| if v { 1 } else { 0 };
         let s = format!(
-            "pl={}\noptimize={}\nline_numbers={}\ninline_title={}\nfiles={}\nembed_images={}\nfont={}\nweight={}\nbold_weight={}\ncode_weight={}\ngamma={}\nsize={}\nline_height={}\n",
-            b(self.pl),
+            "lang={}\noptimize={}\nline_numbers={}\ninline_title={}\nfiles={}\nembed_images={}\nfont={}\nweight={}\nbold_weight={}\ncode_weight={}\ngamma={}\nsize={}\nline_height={}\n",
+            self.lang.code(),
             b(self.optimize),
             b(self.line_numbers),
             b(self.inline_title),
@@ -334,7 +334,7 @@ pub struct App {
     settings: bool,
     font_list: Vec<String>,
     font_filter: String,
-    applied_font: (String, u16, u16),
+    applied_font: (String, u16, u16, Lang),
     error: Option<String>,
     close_queue: Vec<u64>,
     quit_after: bool,
@@ -406,8 +406,8 @@ struct AboutRow {
 }
 
 /// The shortcut list shown in About; keys come from `shortcuts()`, so they cannot drift apart.
-fn about_rows(pl: bool) -> Vec<AboutRow> {
-    let t = |s| tr(pl, s);
+fn about_rows(lang: Lang) -> Vec<AboutRow> {
+    let t = |s| tr(lang, s);
     let table = shortcuts();
     let by = |what, actions: &[Action], syntax| {
         let keys = actions
@@ -502,7 +502,7 @@ fn shortcuts() -> Vec<(Modifiers, Key, Action)> {
 }
 
 fn setup_style(ctx: &Context, cfg: &Config) {
-    fonts::apply(ctx, &cfg.font, cfg.weight, cfg.bold_weight);
+    fonts::apply(ctx, &cfg.font, cfg.weight, cfg.bold_weight, cfg.lang);
     ctx.all_styles_mut(|s| {
         s.spacing.button_padding = vec2(8.0, 4.0);
         s.spacing.item_spacing = vec2(8.0, 5.0);
@@ -616,7 +616,7 @@ impl App {
             settings: false,
             font_list: vec![],
             font_filter: String::new(),
-            applied_font: Default::default(),
+            applied_font: (String::new(), 0, 0, Lang::English),
             error: None,
             close_queue: vec![],
             quit_after: false,
@@ -635,7 +635,7 @@ impl App {
             primary: String::new(),
             now: 0.0,
         };
-        app.applied_font = (app.cfg.font.clone(), app.cfg.weight, app.cfg.bold_weight);
+        app.applied_font = (app.cfg.font.clone(), app.cfg.weight, app.cfg.bold_weight, app.cfg.lang);
         for f in files {
             app.open_path(f);
         }
@@ -646,7 +646,7 @@ impl App {
     }
 
     fn t(&self, s: &'static str) -> &'static str {
-        tr(self.cfg.pl, s)
+        tr(self.cfg.lang, s)
     }
 
     fn new_doc(&mut self) {
@@ -690,7 +690,7 @@ impl App {
     fn save(&mut self, i: usize, ask: bool) -> bool {
         let doc = &mut self.docs[i];
         if ask || doc.path.is_none() {
-            let name = format!("{}.md", doc.stem(self.cfg.pl));
+            let name = format!("{}.md", doc.stem(self.cfg.lang));
             let mut dlg = rfd::FileDialog::new().add_filter("Markdown", &["md", "markdown"]).set_file_name(name);
             if let Some(d) = doc.dir() {
                 dlg = dlg.set_directory(d);
@@ -1052,7 +1052,7 @@ impl App {
         }
         let doc = &self.docs[self.active];
         let dir = doc.dir().unwrap_or_default();
-        let name = match save_webp(rgba, &dir, &doc.stem(self.cfg.pl)) {
+        let name = match save_webp(rgba, &dir, &doc.stem(self.cfg.lang)) {
             Ok(name) => name,
             Err(e) => {
                 self.error = Some(e);
@@ -1209,8 +1209,8 @@ impl App {
     }
 
     fn menu_bar(&mut self, ui: &mut Ui, acts: &mut Vec<Action>) {
-        let pl = self.cfg.pl;
-        let t = |s| tr(pl, s);
+        let lang = self.cfg.lang;
+        let t = |s| tr(lang, s);
         let sc = shortcuts();
         let label =
             |a: Action| sc.iter().find(|(_, _, x)| *x == a).map(|(m, k, _)| shortcut_label(*m, *k)).unwrap_or_default();
@@ -1277,7 +1277,7 @@ impl App {
     }
 
     fn tabs(&mut self, ui: &mut Ui) {
-        let pl = self.cfg.pl;
+        let lang = self.cfg.lang;
         let mut close = None;
         ScrollArea::horizontal().show(ui, |ui| {
             ui.horizontal(|ui| {
@@ -1291,7 +1291,7 @@ impl App {
                         .inner_margin(Margin { left: 12, right: 6, top: 6, bottom: 6 })
                         .show(ui, |ui| {
                             let color = if active { md::HEAD } else { md::DIM.gamma_multiply(1.6) };
-                            let name = if d.dirty() { format!("● {}", d.title(pl)) } else { d.title(pl) };
+                            let name = if d.dirty() { format!("● {}", d.title(lang)) } else { d.title(lang) };
                             let l = ui.add(
                                 Label::new(RichText::new(name).color(color)).sense(Sense::click()).selectable(false),
                             );
@@ -1316,12 +1316,12 @@ impl App {
 
     /// Returns what the user clicked: a link (ctrl+click) or a text position (middle click).
     fn editor(&mut self, ui: &mut Ui) -> (Option<String>, Option<usize>) {
-        let pl = self.cfg.pl;
+        let lang = self.cfg.lang;
         let ctx = ui.ctx().clone();
         let Some(doc) = self.docs.get_mut(self.active) else {
             ui.centered_and_justified(|ui| {
                 ui.label(
-                    RichText::new(tr(pl, "Open a file with Ctrl+O or start typing in a new tab (Ctrl+N)."))
+                    RichText::new(tr(lang, "Open a file with Ctrl+O or start typing in a new tab (Ctrl+N)."))
                         .color(md::DIM),
                 );
             });
@@ -1344,7 +1344,7 @@ impl App {
         let mut find_act = None;
         if let Some(f) = &mut self.find {
             ui.horizontal(|ui| {
-                let r = ui.add(TextEdit::singleline(&mut f.query).hint_text(tr(pl, "Find")).desired_width(220.0));
+                let r = ui.add(TextEdit::singleline(&mut f.query).hint_text(tr(lang, "Find")).desired_width(220.0));
                 if std::mem::take(&mut f.focus) {
                     r.request_focus();
                 }
@@ -1355,18 +1355,18 @@ impl App {
                     find_act = Some(0);
                     r.request_focus();
                 }
-                ui.add(TextEdit::singleline(&mut f.replace).hint_text(tr(pl, "Replace")).desired_width(220.0));
-                if ui.button(tr(pl, "Next")).clicked() {
+                ui.add(TextEdit::singleline(&mut f.replace).hint_text(tr(lang, "Replace")).desired_width(220.0));
+                if ui.button(tr(lang, "Next")).clicked() {
                     find_act = Some(0);
                 }
-                if ui.button(tr(pl, "Replace")).clicked() {
+                if ui.button(tr(lang, "Replace")).clicked() {
                     find_act = Some(1);
                 }
-                if ui.button(tr(pl, "Replace all")).clicked() {
+                if ui.button(tr(lang, "Replace all")).clicked() {
                     find_act = Some(2);
                 }
                 if f.none {
-                    ui.label(RichText::new(tr(pl, "No matches")).color(md::DIM));
+                    ui.label(RichText::new(tr(lang, "No matches")).color(md::DIM));
                 }
                 if ui.add(Button::new("×").frame(false)).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     find_act = Some(3);
@@ -1412,7 +1412,7 @@ impl App {
                     if cfg.inline_title {
                         ui.add(
                             Label::new(
-                                RichText::new(doc.stem(pl))
+                                RichText::new(doc.stem(lang))
                                     .size((look.size * TITLE_SCALE).round())
                                     .family(FontFamily::Name("b".into()))
                                     .color(md::HEAD),
@@ -1655,15 +1655,15 @@ impl App {
     fn modals(&mut self, ctx: &Context) {
         // Enter presses the dialog's default button.
         let enter = ctx.input(|i| i.key_pressed(Key::Enter));
-        let pl = self.cfg.pl;
-        let t = |s| tr(pl, s);
+        let lang = self.cfg.lang;
+        let t = |s| tr(lang, s);
         if let Some(&id) = self.close_queue.first() {
             let Some(i) = self.docs.iter().position(|d| d.id == id) else {
                 self.close_queue.remove(0);
                 return;
             };
             self.active = i;
-            let name = self.docs[i].title(pl);
+            let name = self.docs[i].title(lang);
             let mut choice = None;
             dialog(ctx, "close_modal", t("Unsaved changes"), 380.0, |ui| {
                 ui.label(format!("{} „{name}”?", t("Save changes to")));
@@ -1784,7 +1784,7 @@ impl App {
                     .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
                     .show(ui, |ui| {
                         egui::Grid::new("shortcuts").num_columns(3).spacing([20.0, 5.0]).show(ui, |ui| {
-                            for row in about_rows(pl) {
+                            for row in about_rows(lang) {
                                 ui.label(RichText::new(row.what).color(md::MUTED));
                                 ui.label(RichText::new(row.keys).color(md::LINK));
                                 ui.label(RichText::new(row.syntax).monospace().color(md::CODE));
@@ -1814,8 +1814,8 @@ impl App {
 
     /// Settings dialog body; returns true when it should close.
     fn settings_ui(&mut self, ui: &mut Ui) -> bool {
-        let pl = self.cfg.pl;
-        let t = |s| tr(pl, s);
+        let lang = self.cfg.lang;
+        let t = |s| tr(lang, s);
         if self.font_list.is_empty() {
             self.font_list = fonts::families();
         }
@@ -1875,10 +1875,15 @@ impl App {
             ui.end_row();
 
             ui.label(t("Language"));
-            ui.horizontal(|ui| {
-                ui.radio_value(&mut self.cfg.pl, false, "English");
-                ui.radio_value(&mut self.cfg.pl, true, "Polski");
-            });
+            egui::ComboBox::from_id_salt("language")
+                .selected_text(self.cfg.lang.label())
+                .width(240.0)
+                .height(360.0)
+                .show_ui(ui, |ui| {
+                    for lang in Lang::ALL {
+                        ui.selectable_value(&mut self.cfg.lang, lang, lang.label());
+                    }
+                });
             ui.end_row();
         });
         ui.add_space(16.0);
@@ -1896,11 +1901,11 @@ impl App {
         let Some(doc) = self.docs.get(self.active) else {
             return;
         };
-        let t = |s| tr(self.cfg.pl, s);
+        let t = |s| tr(self.cfg.lang, s);
         let (chars, words) = doc.stats();
         let links = doc.cache.as_ref().map_or(0, |c| c.decos.iter().filter(|d| matches!(d, Deco::Link { .. })).count());
         let kb = doc.text.len() as f32 / 1024.0;
-        let kb = if self.cfg.pl { format!("{kb:.1}").replace('.', ",") } else { format!("{kb:.1}") };
+        let kb = if self.cfg.lang.decimal_comma() { format!("{kb:.1}").replace('.', ",") } else { format!("{kb:.1}") };
         let s = format!(
             "{}: {chars}   ·   {}: {words}   ·   {}: {links}   ·   {kb} KB",
             t("characters"),
@@ -2175,7 +2180,7 @@ impl eframe::App for App {
                 .resizable(true)
                 .default_size(220.0)
                 .frame(egui::Frame::NONE.fill(CHROME).inner_margin(Margin::symmetric(8, 4)))
-                .show(ui, |ui| browser.ui(ui, &open, active, self.cfg.pl))
+                .show(ui, |ui| browser.ui(ui, &open, active, self.cfg.lang))
                 .inner;
             match picked {
                 Some(files::Event::Open(p)) => self.open_path(p),
@@ -2217,16 +2222,16 @@ impl eframe::App for App {
         }
 
         let title = match self.docs.get(self.active) {
-            Some(d) => format!("{} — MDEdit", d.title(self.cfg.pl)),
+            Some(d) => format!("{} — MDEdit", d.title(self.cfg.lang)),
             None => "MDEdit".to_owned(),
         };
         if title != self.title {
             ctx.send_viewport_cmd(ViewportCommand::Title(title.clone()));
             self.title = title;
         }
-        let font = (self.cfg.font.clone(), self.cfg.weight, self.cfg.bold_weight);
+        let font = (self.cfg.font.clone(), self.cfg.weight, self.cfg.bold_weight, self.cfg.lang);
         if font != self.applied_font {
-            fonts::apply(&ctx, &font.0, font.1, font.2);
+            fonts::apply(&ctx, &font.0, font.1, font.2, font.3);
             self.applied_font = font;
         }
         if self.cfg.gamma != self.saved_cfg.gamma {
@@ -2248,7 +2253,7 @@ mod tests {
 
     #[test]
     fn about_lists_every_shortcut() {
-        let covered: Vec<Action> = about_rows(false).into_iter().flat_map(|r| r.covers).collect();
+        let covered: Vec<Action> = about_rows(Lang::English).into_iter().flat_map(|r| r.covers).collect();
         for (m, k, a) in shortcuts() {
             assert!(covered.contains(&a), "About is missing {} ({})", shortcut_label(m, k), k.name());
         }
@@ -2457,7 +2462,7 @@ mod tests {
 
     fn layout(text: &str, cursor: Option<usize>, wrap: f32) -> (Arc<Galley>, Vec<Deco>) {
         let ctx = Context::default();
-        fonts::apply(&ctx, "", 200, 400);
+        fonts::apply(&ctx, "", 200, 400, Lang::English);
         let _ = ctx.run_ui(RawInput::default(), |_| {});
         let mut layout = |job| ctx.fonts_mut(|f| f.layout_job(job));
         md::build(text, cursor, wrap, &LOOK, 1.0, &mut |_| None, &mut layout)
