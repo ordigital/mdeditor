@@ -1,0 +1,24 @@
+[package]
+name = "mdedit"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+authors = ["ORDIGITAL Adam Mateusz Brożyński"]
+description = "WYSIWYG Markdown editor in the style of Obsidian's live preview"
+repository = "https://github.com/ordigital/mdeditor"
+readme = "README.md"
+keywords = ["markdown", "editor", "wysiwyg", "egui"]
+categories = ["text-editors"]
+
+[dependencies]
+eframe = "0.36"
+arboard = { version = "3.6", features = ["wayland-data-control"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
+rfd = "0.16"
+open = "5"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

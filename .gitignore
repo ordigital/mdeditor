@@ -1,0 +1,20 @@
+# Build output
+/target/
+
+# Editor and OS files
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Local tooling and scratch files
+.claude/
+/test.md
+/tmp/
+*.log
+*.orig
+*.rej
+core
+core.*
