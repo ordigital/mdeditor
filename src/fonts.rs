@@ -11,6 +11,9 @@ use eframe::egui::{Context, FontData, FontDefinitions, FontFamily, FontId, TextS
 pub const BUILTIN: &str = "Inter (built-in)";
 
 fn cmd(prog: &str, args: &[&str]) -> Option<String> {
+    if cfg!(windows) {
+        return None; // fontconfig and the desktop settings tools do not exist there
+    }
     let out = Command::new(prog).args(args).output().ok()?;
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())
 }

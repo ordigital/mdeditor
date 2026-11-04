@@ -1,3 +1,6 @@
+// No console window on Windows.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod app;
 mod base64;
 mod files;

@@ -1793,17 +1793,26 @@ impl App {
         egui::Grid::new("settings").num_columns(2).spacing([16.0, 10.0]).show(ui, |ui| {
             ui.label(t("Editor font"));
             let current = if self.cfg.font.is_empty() { fonts::BUILTIN } else { self.cfg.font.as_str() };
-            egui::ComboBox::from_id_salt("font").selected_text(current).width(240.0).height(360.0).show_ui(ui, |ui| {
-                ui.add(TextEdit::singleline(&mut self.font_filter).hint_text(t("Filter")).desired_width(220.0))
-                    .request_focus();
-                let q = self.font_filter.to_lowercase();
-                if q.is_empty() || fonts::BUILTIN.to_lowercase().contains(&q) {
-                    ui.selectable_value(&mut self.cfg.font, String::new(), fonts::BUILTIN);
-                }
-                for f in self.font_list.iter().filter(|f| f.to_lowercase().contains(&q)) {
-                    ui.selectable_value(&mut self.cfg.font, f.clone(), f);
-                }
-            });
+            // Windows has no fontconfig to list fonts from: only the built-in font is offered.
+            if cfg!(windows) {
+                self.cfg.font.clear();
+                ui.label(fonts::BUILTIN);
+            } else {
+                egui::ComboBox::from_id_salt("font").selected_text(current).width(240.0).height(360.0).show_ui(
+                    ui,
+                    |ui| {
+                        ui.add(TextEdit::singleline(&mut self.font_filter).hint_text(t("Filter")).desired_width(220.0))
+                            .request_focus();
+                        let q = self.font_filter.to_lowercase();
+                        if q.is_empty() || fonts::BUILTIN.to_lowercase().contains(&q) {
+                            ui.selectable_value(&mut self.cfg.font, String::new(), fonts::BUILTIN);
+                        }
+                        for f in self.font_list.iter().filter(|f| f.to_lowercase().contains(&q)) {
+                            ui.selectable_value(&mut self.cfg.font, f.clone(), f);
+                        }
+                    },
+                );
+            }
             ui.end_row();
 
             ui.label(t("Text weight"));
@@ -2008,6 +2017,22 @@ fn dialog<R>(
 }
 
 /// Moves a file to the desktop trash using the desktop's own tools (`gio`, or KDE's `kioclient`).
+#[cfg(windows)]
+fn move_to_trash(path: &Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    // The path goes through an environment variable, so it needs no quoting.
+    let script = "Add-Type -AssemblyName Microsoft.VisualBasic; \
+        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($env:MDEDIT_PATH, 'OnlyErrorDialogs', 'SendToRecycleBin')";
+    let out = std::process::Command::new("powershell")
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .env("MDEDIT_PATH", path)
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .output()
+        .map_err(|e| e.to_string())?;
+    if out.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_owned()) }
+}
+
+#[cfg(not(windows))]
 fn move_to_trash(path: &Path) -> Result<(), String> {
     let tools: [(&str, &[&str]); 3] = [("gio", &["trash"]), ("kioclient6", &["move"]), ("kioclient5", &["move"])];
     for (tool, args) in tools {
