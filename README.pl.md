@@ -6,6 +6,11 @@ Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyc
 
 ## Funkcje
 
+- Cztery szerokości widoku: **Wąski, Średni, Szeroki, Pełny**, przełączane przez **F2**. Nieco większa czcionka w plikach kodu.
+- Przeciąganie plików na okno otwiera je w zakładkach. Okno otwierania domyślnie pokazuje wszystkie pliki; filtr Markdown można wybrać ręcznie. Na Linuksie aplikacja preferuje X11/XWayland, gdy jest dostępny — winit 0.30 nie odbiera upuszczanych plików w natywnym Waylandzie.
+
+- **Pasek formatowania pod zakładkami**: nagłówki 1–6, zwykły tekst, style, linki, listy, zadania, cytaty i obrazy.
+- **Ctrl+Shift+K** tworzy nowy plik Markdown w folderze bieżącego dokumentu i linkuje do niego zaznaczony tekst. Enter lub Zapisz potwierdza; istniejące pliki nie są nadpisywane.
 - **Podgląd na żywo** nagłówków, pogrubienia, kursywy, przekreślenia, `==wyróżnienia==`, kodu w linii i bloków kodu, linków, `[[linków wiki]]`, `#tagów`, przypisów, `%%komentarzy%%`, linii poziomych i nagłówka YAML.
 - **Listy i zadania** z wiszącym wcięciem, klikalne pola wyboru. Numeracja aktualizuje się automatycznie. Enter dodaje kolejny punkt, Shift+Enter nową linię w tym samym punkcie, a Tab i Shift+Tab zmieniają poziom zagnieżdżenia.
 - **Cytaty i callouty** (`> [!note]`, `tip`, `warning`, `danger`, `question` itd.) oraz **tabele** z wyrównaniem kolumn. Długi tekst w komórkach zawija się do nowych linii.
@@ -16,8 +21,9 @@ Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyc
 - **Jedna instancja** (Linux): ponowne uruchomienie `mdedit plik.md` otwiera plik w nowej karcie działającego okna.
 - Schowek zaznaczenia w Linuksie: zaznacz tekst, wklej środkowym przyciskiem myszy albo Shift+Insert.
 - Domyślne ustawienia z ciemnego motywu Obsidiana: czcionki Inter (tekst) i Source Code Pro (kod), obie wbudowane. Interfejs używa czcionki systemowej (ustawienia KDE / GNOME, zapasowo Noto Sans 10).
-- Pliki konfiguracyjne są pokazywane jako kolorowany tekst, zależnie od rozszerzenia: XML, TOML, JSON, YAML, INI/CFG/CONF i `.env`.
-  Pliki Markdown pozostają bez zmian.
+- Pliki konfiguracyjne są pokazywane jako kolorowany tekst, zależnie od rozszerzenia: XML, TOML, JSON, YAML, INI/CFG/CONF i `.env`. Kolorowane są także skrypty Bash (`.sh`, `.bash`) oraz pliki startowe powłoki, np. `.bashrc` i `.profile`.
+- **Kolorowanie kodu** HTML, CSS, PHP, Python, Rust, C, C++, Go i JavaScript, także HTML/CSS/JS osadzonych w PHP i obsługiwanych bloków kodu w Markdown. Analiza działa w tle i wykorzystuje niezmienione linie.
+  Bardzo długie linie kodu (ponad 256 KiB) pozostają zwykłym tekstem. [Architektura i pomiary](docs/syntax-highlighting.md).
 - Pliki binarne i bardzo duże (ponad 5 MB) są odrzucane, zamiast zamrażać edytor.
 - Końce linii Windows (CRLF) są zachowywane przy zapisie. Ctrl+klik otwiera tylko linki internetowe i pocztowe, nigdy programów ani skryptów.
 
@@ -48,6 +54,7 @@ instaluje dla bieżącego użytkownika `mdedit.desktop` i ikonę. Na Wayland iko
 
 | Akcja | Klawisze |
 | --- | --- |
+| Zmiana szerokości widoku | F2 |
 | Nowy / Otwórz / Zapisz / Zapisz jako | Ctrl+N (Ctrl+T) / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
 | Zapisz wszystko | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S na macOS)¹ |
 | Zamknij / Zamknij wszystko / Wyjście | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |
@@ -60,6 +67,7 @@ instaluje dla bieżącego użytkownika `mdedit.desktop` i ikonę. Na Wayland iko
 | Preferencje / O programie | Ctrl+, / F1 |
 | Pogrubienie / Kursywa / Przekreślenie | Ctrl+B / Ctrl+I / Ctrl+D |
 | Kod w linii / Wyróżnienie / Link | Ctrl+E / Ctrl+Shift+H / Ctrl+K |
+| Nowa strona z linkiem | Ctrl+Shift+K |
 | Nagłówek 1–6 / zwykły tekst | Ctrl+1 … Ctrl+6 / Ctrl+0 |
 | Lista punktowana / zadanie / cytat | Ctrl+Shift+L / Ctrl+L / Ctrl+Shift+Q |
 | Otwórz link lub przejdź do przypisu | Ctrl+klik |
@@ -71,7 +79,7 @@ instaluje dla bieżącego użytkownika `mdedit.desktop` i ikonę. Na Wayland iko
 
 ## Preferencje
 
-Edycja → Preferencje… (Ctrl+,): czcionka edytora, grubość tekstu / pogrubienia / kodu, gamma tekstu, rozmiar czcionki, interlinia, sposób zapisu wklejanych obrazów i język. **Resetuj** przywraca domyślne ustawienia czcionek (Inter, grubości 300 / 600 / 400, gamma 0,80, 17 px, interlinia 1,65). Widok zawiera przełączniki: szerokość czytelnej linii, numery linii, tytuł w treści i panel plików.
+Edycja → Preferencje… (Ctrl+,): czcionka edytora, grubość tekstu / pogrubienia / kodu, gamma tekstu, rozmiar czcionki, interlinia, sposób zapisu wklejanych obrazów i język. **Resetuj** przywraca domyślne ustawienia czcionek (Inter, grubości 300 / 600 / 400, gamma 0,80, 17 px, interlinia 1,65). Widok → Szerokość widoku oferuje warianty Wąski, Średni, Szeroki i Pełny; F2 przełącza je w pętli. Wąski zachowuje dotychczasową szerokość, a Pełny wykorzystuje dostępną przestrzeń edytora. Stare ustawienie migruje automatycznie. Widok zawiera też przełączniki numerów linii, tytułu w treści i panelu plików.
 
 Ustawienia są w `~/.config/mdedit/config`, ostatnie pliki w `~/.config/mdedit/recent`.
 
@@ -82,6 +90,7 @@ Ustawienia są w `~/.config/mdedit/config`, ostatnie pliki w `~/.config/mdedit/r
 | `src/main.rs` | punkt wejścia, gniazdo jednej instancji, ikona okna |
 | `src/app.rs` | aplikacja: menu, karty, edytor, okna dialogowe, cofanie, ustawienia |
 | `src/md.rs` | układ Markdown do stylizowanego tekstu i dekoracje |
+| `src/markdown.rs` | wspólne reguły prefiksów Markdown, wcięć i granic bloków |
 | `src/latex.rs` | zamiana wzorów LaTeX na Unicode |
 | `src/highlight.rs` | kolorowanie plików konfiguracyjnych |
 | `src/files.rs` | panel plików |

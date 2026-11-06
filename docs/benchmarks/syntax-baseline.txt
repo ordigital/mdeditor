@@ -1,0 +1,12 @@
+   Compiling mdedit v0.1.6 (/media/adam/10TB/apps/MDEditor)
+    Finished `release` profile [optimized] target(s) in 6.04s
+     Running unittests src/main.rs (target/release/deps/mdedit-9ef600bc317b7969)
+
+running 1 test
+editor bytes=10044 cold_ms=5.806 cursor_ms=[0.7924559999999999, 0.5505720000000001, 0.542504] edit_ms=0.995
+editor bytes=100006 cold_ms=9.473 cursor_ms=[6.627775, 9.104056, 7.066685] edit_ms=5.663
+editor bytes=1000060 cold_ms=29.328 cursor_ms=[29.512318999999998, 28.116329, 29.262932] edit_ms=59.410
+test app::tests::benchmark_editor_syntax_latency ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 64 filtered out; finished in 0.27s
+

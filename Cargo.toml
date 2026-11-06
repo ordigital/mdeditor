@@ -1,6 +1,6 @@
 [package]
 name = "mdedit"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
@@ -17,6 +17,11 @@ arboard = { version = "3.6", features = ["wayland-data-control"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
 rfd = "0.16"
 open = "5"
+syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "regex-onig"] }
+
+# winit 0.30 has no native Wayland file-drop support; use its typed X11 hook.
+[target.'cfg(target_os = "linux")'.dependencies]
+winit = { version = "0.30", default-features = false, features = ["x11"] }
 
 [profile.release]
 opt-level = 3

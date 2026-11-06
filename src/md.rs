@@ -13,6 +13,7 @@ use eframe::egui::{
 };
 
 use crate::latex;
+use crate::markdown::{self, Fence, ListMarker};
 
 /// User-adjustable text metrics.
 #[derive(Clone, Copy, PartialEq)]
@@ -88,6 +89,8 @@ pub enum Deco {
         start: usize,
         end: usize,
         level: usize,
+        /// Indentation before the quote, in the same visual steps as list nesting.
+        indent: usize,
         color: Option<Color32>,
     },
     Code(usize, usize),
@@ -409,6 +412,20 @@ pub fn build(
     img_size: &mut dyn FnMut(&str) -> Option<(String, Vec2)>,
     layout: &mut dyn FnMut(LayoutJob) -> Arc<Galley>,
 ) -> (Arc<Galley>, Vec<Deco>) {
+    build_colored(text, cursor, wrap, look, pixels_per_point, &[], img_size, layout)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn build_colored(
+    text: &str,
+    cursor: Option<usize>,
+    wrap: f32,
+    look: &Look,
+    pixels_per_point: f32,
+    spans: &[crate::highlight::Span],
+    img_size: &mut dyn FnMut(&str) -> Option<(String, Vec2)>,
+    layout: &mut dyn FnMut(LayoutJob) -> Arc<Galley>,
+) -> (Arc<Galley>, Vec<Deco>) {
     let mut job = LayoutJob { text: text.to_owned(), ..Default::default() };
     job.wrap.max_width = wrap;
     let mut cx = Cx { look, wrap, decos: Vec::new(), img_size, layout, callout: None };
@@ -419,20 +436,19 @@ pub fn build(
     // Pre-pass: multi-line blocks (code, tables, formulas, front matter) as (first, last) line ranges.
     let mut kinds = vec![Kind::Normal; lines.len()];
     let mut blocks = Vec::new();
-    let mut open: Option<(usize, &str)> = None;
+    let mut open: Option<(usize, Fence)> = None;
     let mut i = 0;
-    if lines.first().is_some_and(|l| l.trim_end() == "---")
-        && let Some(end) = lines.iter().skip(1).position(|l| l.trim_end() == "---")
-    {
-        kinds[..=end + 1].fill(Kind::Front);
-        blocks.push((0, end + 1));
-        i = end + 2;
+    if let Some(end) = markdown::front_matter_end(text) {
+        kinds[..=end].fill(Kind::Front);
+        blocks.push((0, end));
+        i = end + 1;
     }
     while i < lines.len() {
         let t = lines[i].trim_start();
+        let opening = Fence::opening(t);
         match open {
             Some((start, fence)) => {
-                if t.trim_end().starts_with(fence) && t.trim_end().trim_start_matches(&fence[..1]).is_empty() {
+                if fence.closes(t) {
                     kinds[i] = Kind::Fence;
                     blocks.push((start, i));
                     open = None;
@@ -440,9 +456,9 @@ pub fn build(
                     kinds[i] = Kind::Code;
                 }
             }
-            None if t.starts_with("```") || t.starts_with("~~~") => {
+            None if opening.is_some() => {
                 kinds[i] = Kind::Fence;
-                open = Some((i, &t[..3]));
+                open = opening.map(|fence| (i, fence));
             }
             None if t.starts_with('|') && lines.get(i + 1).is_some_and(|l| is_table_sep(l)) => {
                 let start = i;
@@ -537,6 +553,16 @@ pub fn build(
                     }
                 };
                 st.fill(s);
+                if kind == Kind::Code {
+                    let start = spans.partition_point(|s| s.range.end <= byte0);
+                    for token in spans[start..].iter().take_while(|s| s.range.start < byte0 + n) {
+                        let a = token.range.start.max(byte0) - byte0;
+                        let b = token.range.end.min(byte0 + n) - byte0;
+                        for style in &mut st[a..b] {
+                            style.color = Some(token.color);
+                        }
+                    }
+                }
                 if kind == Kind::TableRow && !block_rev {
                     // Only the first hidden char reserves the row's height (a long line may wrap).
                     st.iter_mut().skip(1).for_each(|x| x.lh = 0);
@@ -643,10 +669,11 @@ fn line(cx: &mut Cx, content: &str, rev: bool, st: &mut [St], byte0: usize, ci0:
         }
         return None;
     } else {
-        let mut quotes = 0;
-        while i < n && b[i] == b'>' {
-            quotes += 1;
-            i = if i + 1 < n && b[i + 1] == b' ' { i + 2 } else { i + 1 };
+        let prefix = markdown::prefix(content);
+        let quotes = prefix.quotes;
+        let quote_indent = if quotes > 0 { markdown::indent_level(&b[..prefix.leading]) } else { 0 };
+        if quotes > 0 {
+            i = prefix.quote_end;
         }
         st[..i].fill(hidden);
         if quotes == 0 {
@@ -672,23 +699,31 @@ fn line(cx: &mut Cx, content: &str, rev: bool, st: &mut [St], byte0: usize, ci0:
                     st[i..i + 2].fill(marker(title, rev));
                     st[i + close..n].fill(marker(title, rev));
                 }
-                cx.decos.push(Deco::Quote { start: ci0, end: ci0 + chars(content), level: quotes, color: cx.callout });
-                return Some((quotes as f32 * cx.look.indent(), i));
+                cx.decos.push(Deco::Quote {
+                    start: ci0,
+                    end: ci0 + chars(content),
+                    level: quotes,
+                    indent: quote_indent,
+                    color: cx.callout,
+                });
+                return Some(((quote_indent + quotes) as f32 * cx.look.indent(), i));
             }
-            cx.decos.push(Deco::Quote { start: ci0, end: ci0 + chars(content), level: quotes, color: cx.callout });
-            level = quotes as f32;
+            cx.decos.push(Deco::Quote {
+                start: ci0,
+                end: ci0 + chars(content),
+                level: quotes,
+                indent: quote_indent,
+                color: cx.callout,
+            });
+            level = (quote_indent + quotes) as f32;
         }
-        let ws = &b[i..];
-        let spaces = ws.iter().take_while(|c| **c == b' ' || **c == b'\t').count();
-        let nest = ws[..spaces].iter().map(|c| if *c == b'\t' { 2 } else { 1 }).sum::<usize>() / 2;
-        let j = i + spaces;
-        if j < n && matches!(b[j], b'-' | b'*' | b'+') && (j + 1 == n || b[j + 1] == b' ') {
-            let rest = &content[(j + 2).min(n)..];
-            let task = ["[ ]", "[x]", "[X]"].iter().any(|t| rest == *t || rest.starts_with(&format!("{t} ")));
-            let m = if task { (j + 6).min(n) } else { (j + 2).min(n) };
+        let j = prefix.marker_start;
+        let spaces = j - i;
+        let nest = markdown::indent_level(&b[i..j]);
+        if let Some(kind @ (ListMarker::Bullet(_) | ListMarker::Task(_))) = prefix.marker {
+            let m = prefix.content_start;
             st[i..m].fill(hidden);
-            if task {
-                let checked = rest.as_bytes()[1] != b' ';
+            if let ListMarker::Task(checked) = kind {
                 base.done = checked;
                 cx.decos.push(Deco::Check { ci: ci(m), byte: byte0 + j + 3, checked });
             } else {
@@ -697,11 +732,10 @@ fn line(cx: &mut Cx, content: &str, rev: bool, st: &mut [St], byte0: usize, ci0:
             i = m;
             level += nest as f32 + 1.0;
         } else {
-            let d = b[j..].iter().take_while(|c| c.is_ascii_digit()).count();
-            if d > 0 && j + d + 1 < n && matches!(b[j + d], b'.' | b')') && b[j + d + 1] == b' ' {
+            if matches!(prefix.marker, Some(ListMarker::Ordered { .. })) {
                 st[i..j].fill(hidden);
-                st[j..j + d + 2].fill(St { dim: true, ..base });
-                i = j + d + 2;
+                st[j..prefix.content_start].fill(St { dim: true, ..base });
+                i = prefix.content_start;
                 level += nest as f32 + 1.0;
             } else if spaces > 0 {
                 st[i..j].fill(hidden);
@@ -739,7 +773,21 @@ fn marker(s: St, rev: bool) -> St {
 
 /// Finds `[text](url)` starting at `i` (b[i] == '['); returns (index of ']', index of ')').
 fn parse_link(b: &[u8], i: usize) -> Option<(usize, usize)> {
-    let t = i + 1 + b[i + 1..].iter().position(|c| *c == b']')?;
+    let mut t = i + 1;
+    let mut depth = 0;
+    loop {
+        match *b.get(t)? {
+            b'\\' => {
+                t += 2;
+                continue;
+            }
+            b'[' => depth += 1,
+            b']' if depth == 0 => break,
+            b']' => depth -= 1,
+            _ => {}
+        }
+        t += 1;
+    }
     if b.get(t + 1) != Some(&b'(') {
         return None;
     }
@@ -757,7 +805,27 @@ fn link_url(s: &str) -> String {
         Some(r) => r.split('>').next().unwrap_or(r),
         None => s.split(' ').next().unwrap_or(s),
     };
-    s.replace("%20", " ")
+    s.to_owned()
+}
+
+/// Percent-decode local URL paths once, after separating the URL fragment.
+pub fn decode_path(s: &str) -> Option<String> {
+    let mut bytes = Vec::with_capacity(s.len());
+    let mut i = 0;
+    while i < s.len() {
+        if s.as_bytes()[i] == b'%'
+            && i + 2 < s.len()
+            && let Some(hex) = s.get(i + 1..i + 3)
+            && let Ok(byte) = u8::from_str_radix(hex, 16)
+        {
+            bytes.push(byte);
+            i += 3;
+        } else {
+            bytes.push(s.as_bytes()[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(bytes).ok()
 }
 
 /// Splits Obsidian's size suffix: `alt|300` → ("alt", Some(300)).

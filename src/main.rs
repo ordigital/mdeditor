@@ -8,6 +8,7 @@ mod fonts;
 mod highlight;
 mod i18n;
 mod latex;
+mod markdown;
 mod md;
 
 use std::path::PathBuf;
@@ -30,6 +31,19 @@ fn main() -> eframe::Result {
             .with_icon(icon())
             .with_inner_size([1000.0, 760.0]),
         ..Default::default()
+    };
+    // winit 0.30 does not emit file-drop events on Wayland (winit#1881).
+    // Prefer X11/XWayland when available; keep native Wayland on Wayland-only systems.
+    #[cfg(target_os = "linux")]
+    let options = {
+        let mut options = options;
+        if std::env::var_os("DISPLAY").is_some_and(|display| !display.is_empty()) {
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            options.event_loop_builder = Some(Box::new(|builder| {
+                builder.with_x11();
+            }));
+        }
+        options
     };
     let result = eframe::run_native(
         "MDEdit",

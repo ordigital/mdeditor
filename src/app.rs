@@ -17,10 +17,23 @@ use crate::files;
 use crate::fonts;
 use crate::highlight::{self, Syntax};
 use crate::i18n::{Lang, tr};
+use crate::markdown::{self, Fence, ListMarker};
 use crate::md::{self, Deco};
 use eframe::egui::epaint::FontColorTransferFunction;
 
 const MAX_LINE_W: f32 = 720.0;
+const VIEW_WIDTHS: [&str; 4] = ["Narrow", "Medium", "Wide", "Full"];
+
+/// Interpolate between the original reading column and the original full-width layout.
+fn view_geometry(full: f32, gutter: f32, width: u8) -> (f32, f32) {
+    let available = (full - gutter - 48.0).max(100.0);
+    let narrow = available.min(MAX_LINE_W);
+    let t = f32::from(width) / 3.0;
+    let column = narrow + (available - narrow) * t;
+    let left = ((full - narrow) / 2.0).max(gutter + 16.0);
+    (column, left + (gutter + 24.0 - left) * t)
+}
+
 const MAX_IMG_W: u32 = 1200;
 /// Undo steps kept per document and entries in File → Recent.
 const HISTORY: usize = 10;
@@ -40,6 +53,7 @@ enum Fmt {
     Link,
     Heading(u8),
     Bullet,
+    Ordered,
     Task,
     Quote,
 }
@@ -62,10 +76,129 @@ enum Action {
     Undo,
     Redo,
     Files,
+    CycleWidth,
     PastePrimary,
     Exit,
+    NewPage,
     OpenRecent(usize),
     Fmt(Fmt),
+}
+
+struct NewPage {
+    name: String,
+    doc_id: u64,
+    selection: (usize, usize),
+    original: String,
+    dir: PathBuf,
+    focus: bool,
+    error: Option<String>,
+}
+
+/// All formatting buttons share the existing editor actions and translated labels.
+fn formatting_buttons() -> &'static [(&'static str, &'static str, Action)] {
+    use Fmt::*;
+    &[
+        ("B", "Bold", Action::Fmt(Bold)),
+        ("I", "Italic", Action::Fmt(Italic)),
+        ("S", "Strikethrough", Action::Fmt(Strike)),
+        ("<>", "Inline code", Action::Fmt(Code)),
+        ("", "Highlight", Action::Fmt(Mark)),
+        ("", "Link", Action::Fmt(Link)),
+        ("", "New linked page", Action::NewPage),
+        ("P", "Normal text", Action::Fmt(Heading(0))),
+        ("H1", "Heading 1–6", Action::Fmt(Heading(1))),
+        ("H2", "Heading 1–6", Action::Fmt(Heading(2))),
+        ("H3", "Heading 1–6", Action::Fmt(Heading(3))),
+        ("H4", "Heading 1–6", Action::Fmt(Heading(4))),
+        ("H5", "Heading 1–6", Action::Fmt(Heading(5))),
+        ("H6", "Heading 1–6", Action::Fmt(Heading(6))),
+        ("", "Bullet list", Action::Fmt(Bullet)),
+        ("", "Numbered list", Action::Fmt(Ordered)),
+        ("", "Task (checkbox)", Action::Fmt(Task)),
+        ("", "Quote", Action::Fmt(Quote)),
+        ("", "Insert image…", Action::Insert),
+    ]
+}
+
+/// Draw symbols as geometry: they must not depend on glyph coverage in the UI font.
+fn formatting_button(ui: &mut Ui, icon: &str, action: Action) -> egui::Response {
+    let vector = matches!(
+        action,
+        Action::Insert
+            | Action::NewPage
+            | Action::Fmt(Fmt::Mark | Fmt::Link | Fmt::Bullet | Fmt::Ordered | Fmt::Task | Fmt::Quote)
+    );
+    let text = RichText::new(if vector { "" } else { icon }).size(15.0);
+    let text = match action {
+        Action::Fmt(Fmt::Bold) => text.strong(),
+        Action::Fmt(Fmt::Italic) => text.italics(),
+        Action::Fmt(Fmt::Strike) => text.strikethrough(),
+        _ => text,
+    };
+    let response = ui.add_sized(vec2(36.0, 28.0), Button::new(text));
+    if vector && ui.is_rect_visible(response.rect) {
+        let painter = ui.painter();
+        let center = response.rect.center();
+        let stroke = ui.style().interact(&response).fg_stroke;
+        let color = stroke.color;
+        let stroke = Stroke::new(1.5, color);
+        let at = |x, y| center + vec2(x, y);
+        let line = |a, b| {
+            painter.line_segment([a, b], stroke);
+        };
+        let rect = |a, b| {
+            painter.rect_stroke(Rect::from_min_max(a, b), 1.0, stroke, egui::StrokeKind::Inside);
+        };
+        match action {
+            Action::Fmt(Fmt::Mark) => {
+                painter.rect_filled(Rect::from_center_size(center, vec2(15.0, 9.0)), 0.5, color);
+            }
+            Action::Fmt(Fmt::Bullet | Fmt::Ordered) => {
+                for (i, y) in [-5.0, 0.0, 5.0].into_iter().enumerate() {
+                    if action == Action::Fmt(Fmt::Ordered) {
+                        painter.text(
+                            at(-7.0, y),
+                            Align2::CENTER_CENTER,
+                            (i + 1).to_string(),
+                            FontId::proportional(7.0),
+                            color,
+                        );
+                    } else {
+                        painter.circle_filled(at(-7.0, y), 1.2, color);
+                    }
+                    line(at(-2.0, y), at(8.0, y));
+                }
+            }
+            Action::Fmt(Fmt::Task) => {
+                rect(at(-7.0, -7.0), at(7.0, 7.0));
+                line(at(-4.0, 0.0), at(-1.0, 3.0));
+                line(at(-1.0, 3.0), at(4.0, -3.0));
+            }
+            Action::Fmt(Fmt::Quote) => {
+                line(at(-7.0, -7.0), at(-7.0, 7.0));
+                for y in [-4.0, 0.0, 4.0] {
+                    line(at(-2.0, y), at(7.0, y));
+                }
+            }
+            Action::Insert => {
+                rect(at(-9.0, -7.0), at(9.0, 7.0));
+                painter.circle_filled(at(4.0, -3.0), 1.5, color);
+                line(at(-7.0, 5.0), at(-2.0, -1.0));
+                line(at(-2.0, -1.0), at(3.0, 5.0));
+                line(at(3.0, 5.0), at(6.0, 2.0));
+            }
+            _ => {
+                line(at(-6.0, 6.0), at(5.0, -5.0));
+                line(at(-2.0, -5.0), at(5.0, -5.0));
+                line(at(5.0, -5.0), at(5.0, 2.0));
+                if action == Action::NewPage {
+                    line(at(4.0, 5.0), at(10.0, 5.0));
+                    line(at(7.0, 2.0), at(7.0, 8.0));
+                }
+            }
+        }
+    }
+    response
 }
 
 struct Cache {
@@ -81,12 +214,14 @@ struct Doc {
     text: String,
     saved: String,
     cache: Option<Cache>,
+    analysis: highlight::Analysis,
+    code_layout: highlight::LayoutCache,
     /// Text as of the last recorded change, and the undo/redo snapshots.
     prev: String,
     undo: Vec<String>,
     redo: Vec<String>,
     last_edit: f64,
-    /// Config files (JSON, YAML, …) are shown as colored plain text instead of Markdown.
+    /// Config files and shell scripts are shown as colored plain text instead of Markdown.
     syntax: Option<Syntax>,
     /// The file used Windows line endings; they are restored when saving (the text is kept as `\n`).
     crlf: bool,
@@ -104,6 +239,8 @@ impl Doc {
             prev: text.clone(),
             text,
             cache: None,
+            analysis: highlight::Analysis::default(),
+            code_layout: highlight::LayoutCache::default(),
             undo: vec![],
             redo: vec![],
             last_edit: f64::NEG_INFINITY,
@@ -185,7 +322,7 @@ impl Doc {
 #[derive(Clone, PartialEq)]
 struct Config {
     lang: Lang,
-    optimize: bool,
+    view_width: u8,
     line_numbers: bool,
     inline_title: bool,
     files: bool,
@@ -215,7 +352,7 @@ impl Config {
     fn default_text() -> Self {
         Config {
             lang: Lang::English,
-            optimize: true,
+            view_width: 0,
             line_numbers: false,
             inline_title: true,
             files: false,
@@ -265,7 +402,10 @@ impl Config {
                 "lang" => self.lang = Lang::from_code(v).unwrap_or(self.lang),
                 // Settings files from before the language menu.
                 "pl" if on => self.lang = Lang::Polish,
-                "optimize" => self.optimize = on,
+                "optimize" if !text.lines().any(|l| l.trim_start().starts_with("view_width=")) => {
+                    self.view_width = if on { 0 } else { 3 }
+                }
+                "view_width" => self.view_width = number(v, 0..=3, self.view_width),
                 "line_numbers" => self.line_numbers = on,
                 "inline_title" => self.inline_title = on,
                 "files" => self.files = on,
@@ -286,9 +426,9 @@ impl Config {
     fn to_text(&self) -> String {
         let b = |v: bool| u8::from(v);
         format!(
-            "lang={}\noptimize={}\nline_numbers={}\ninline_title={}\nfiles={}\nembed_images={}\nfont={}\nweight={}\nbold_weight={}\ncode_weight={}\ngamma={}\nsize={}\nline_height={}\n",
+            "lang={}\nview_width={}\nline_numbers={}\ninline_title={}\nfiles={}\nembed_images={}\nfont={}\nweight={}\nbold_weight={}\ncode_weight={}\ngamma={}\nsize={}\nline_height={}\n",
             self.lang.code(),
-            b(self.optimize),
+            self.view_width,
             b(self.line_numbers),
             b(self.inline_title),
             b(self.files),
@@ -353,6 +493,7 @@ pub struct App {
     quit_after: bool,
     allow_quit: bool,
     rx: Receiver<Vec<PathBuf>>,
+    syntax_worker: Option<highlight::Worker>,
     clipboard: Option<arboard::Clipboard>,
     v_pressed: bool,
     pasted: bool,
@@ -364,6 +505,7 @@ pub struct App {
     browser: Option<files::Browser>,
     /// Name being typed in the "Create new" dialog of the file panel.
     new_file: Option<String>,
+    new_page: Option<NewPage>,
     /// File waiting for delete confirmation.
     delete_file: Option<PathBuf>,
     /// Last text put into the primary selection (middle-click paste).
@@ -451,6 +593,7 @@ fn about_rows(lang: Lang) -> Vec<AboutRow> {
         by(t("Find/Replace"), &[Action::Find], ""),
         by(t("Insert image…"), &[Action::Insert], ""),
         by(t("Files"), &[Action::Files], ""),
+        by(t("View width"), &[Action::CycleWidth], ""),
         by(t("Preferences…"), &[Action::Preferences], ""),
         by(t("About"), &[Action::About], ""),
         by(t("Bold"), &[f(Fmt::Bold)], "**text**"),
@@ -459,6 +602,7 @@ fn about_rows(lang: Lang) -> Vec<AboutRow> {
         by(t("Inline code"), &[f(Fmt::Code)], "`code`"),
         by(t("Highlight"), &[f(Fmt::Mark)], "==text=="),
         by(t("Link"), &[f(Fmt::Link)], "[text](url)"),
+        by(t("New linked page"), &[Action::NewPage], "[text](file.md)"),
         by(t("Bullet list"), &[f(Fmt::Bullet)], "-"),
         by(t("Task (checkbox)"), &[f(Fmt::Task)], "- [ ]"),
         by(t("Quote"), &[f(Fmt::Quote)], ">"),
@@ -485,6 +629,7 @@ fn build_shortcuts() -> Vec<(Modifiers, Key, Action)> {
     let c = Modifiers::COMMAND;
     let cs = Modifiers::COMMAND | Modifiers::SHIFT;
     let mut v = vec![
+        (Modifiers::NONE, Key::F2, CycleWidth),
         (save_all_mods(), Key::S, SaveAll),
         (cs, Key::S, SaveAs),
         (c, Key::S, Save),
@@ -505,6 +650,7 @@ fn build_shortcuts() -> Vec<(Modifiers, Key, Action)> {
         (cs, Key::H, Fmt(self::Fmt::Mark)),
         (cs, Key::L, Fmt(self::Fmt::Bullet)),
         (cs, Key::Q, Fmt(self::Fmt::Quote)),
+        (cs, Key::K, NewPage),
         (c, Key::Q, Exit),
         (c, Key::B, Fmt(self::Fmt::Bold)),
         (c, Key::I, Fmt(self::Fmt::Italic)),
@@ -588,7 +734,8 @@ fn resolve(dir: Option<&Path>, src: &str) -> Option<PathBuf> {
     if src.contains("://") {
         return None;
     }
-    let p = Path::new(src);
+    let decoded = md::decode_path(src)?;
+    let p = Path::new(&decoded);
     if p.is_absolute() { Some(p.to_path_buf()) } else { dir.map(|d| d.join(p)) }
 }
 
@@ -685,6 +832,7 @@ impl App {
             quit_after: false,
             allow_quit: false,
             rx,
+            syntax_worker: None,
             clipboard: arboard::Clipboard::new().ok(),
             v_pressed: false,
             pasted: false,
@@ -694,6 +842,7 @@ impl App {
             recent: Config::load_recent(),
             browser: None,
             new_file: None,
+            new_page: None,
             delete_file: None,
             primary: String::new(),
             now: 0.0,
@@ -772,8 +921,15 @@ impl App {
     fn save(&mut self, i: usize, ask: bool) -> bool {
         let doc = &mut self.docs[i];
         if ask || doc.path.is_none() {
-            let name = format!("{}.md", doc.stem(self.cfg.lang));
-            let mut dlg = rfd::FileDialog::new().add_filter("Markdown", &["md", "markdown"]).set_file_name(name);
+            let name = doc
+                .path
+                .as_ref()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| format!("{}.md", doc.stem(self.cfg.lang)));
+            // A Markdown-only native filter may append .md even to an explicit .sh name.
+            // Let the user enter any extension; apply the Markdown default below only if absent.
+            let mut dlg = rfd::FileDialog::new().add_filter(tr(self.cfg.lang, "Files"), &["*"]).set_file_name(name);
             if let Some(d) = doc.dir() {
                 dlg = dlg.set_directory(d);
             }
@@ -805,20 +961,16 @@ impl App {
     /// Creates the file named in the "Create new" dialog in the file panel's folder and opens it.
     fn create_file(&mut self) {
         let (Some(name), Some(browser)) = (self.new_file.clone(), self.browser.as_mut()) else { return };
-        let name = name.trim();
-        if name.is_empty() || name.contains('/') {
-            return;
-        }
+        let Some(name) = files::file_name(&name) else { return };
         self.new_file = None;
         let mut path = browser.dir.join(name);
         if path.extension().is_none() {
             path.set_extension("md");
         }
         browser.reload();
-        let created = std::fs::OpenOptions::new().write(true).create_new(true).open(&path);
-        match created {
-            Ok(_) => self.open_path(path),
-            Err(e) => self.error = Some(format!("{}: {e}", path.display())),
+        match files::create_empty(&path) {
+            Ok(()) => self.open_path(path),
+            Err(error) => self.error = Some(error),
         }
     }
 
@@ -930,8 +1082,7 @@ impl App {
         });
         let Some((prefix, next, rest)) = parsed else { return };
         if !next.is_empty() && ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Enter)) {
-            let marker_width = rest.saturating_sub(prefix.len()).max(next.len());
-            self.insert(ctx, &format!("\n{prefix}{}", " ".repeat(marker_width)));
+            self.insert(ctx, &format!("\n{prefix}{}", " ".repeat(markdown::INDENT_SPACES)));
             return;
         }
         let empty = text[ls + rest..le].trim().is_empty();
@@ -950,7 +1101,11 @@ impl App {
             (ls..ls, "\t".to_owned(), a + 1)
         } else if shift_tab {
             let line = &text[ls..le];
-            let n = if line.starts_with('\t') { 1 } else { line.bytes().take(2).take_while(|c| *c == b' ').count() };
+            let n = if line.starts_with('\t') {
+                1
+            } else {
+                line.bytes().take(markdown::INDENT_SPACES).take_while(|c| *c == b' ').count()
+            };
             (ls..ls + n, String::new(), a.saturating_sub(n).max(lsc))
         } else {
             return;
@@ -959,6 +1114,97 @@ impl App {
         self.docs[self.active].text.replace_range(range, &with);
         self.set_selection(ctx, cursor, cursor);
         self.checkpoint(ctx);
+    }
+
+    fn begin_new_page(&mut self, ctx: &Context) {
+        let Some(doc) = self.docs.get(self.active).filter(|d| d.syntax.is_none()) else { return };
+        let end = doc.text.chars().count();
+        let selection = self.selection(ctx).unwrap_or((end, end));
+        let name = doc.text[char_to_byte(&doc.text, selection.0)..char_to_byte(&doc.text, selection.1)].to_owned();
+        let dir =
+            doc.dir().or_else(|| self.browser.as_ref().map(|b| b.dir.clone())).or_else(|| std::env::current_dir().ok());
+        let Some(dir) = dir else { return };
+        self.new_page = Some(NewPage {
+            name,
+            doc_id: doc.id,
+            selection,
+            original: doc.text.clone(),
+            dir,
+            focus: true,
+            error: None,
+        });
+    }
+
+    fn create_linked_page(&mut self, ctx: &Context) -> Result<(), String> {
+        let Some(page) = &self.new_page else { return Ok(()) };
+        let name = files::file_name(&page.name).ok_or_else(|| self.t("Invalid file name").to_owned())?;
+        let file =
+            if name.ends_with(".md") || name.ends_with(".markdown") { name.to_owned() } else { format!("{name}.md") };
+        let Some(index) = self.docs.iter().position(|d| d.id == page.doc_id && d.text == page.original) else {
+            return Err(self.t("Unsaved changes").to_owned());
+        };
+        let (a, b) = page.selection;
+        let selected = &page.original[char_to_byte(&page.original, a)..char_to_byte(&page.original, b)];
+        let label = if selected.is_empty() { name } else { selected };
+        let label = label.replace('\\', "\\\\").replace('[', "\\[").replace(']', "\\]");
+        let destination: String = file
+            .bytes()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.') {
+                    (c as char).to_string()
+                } else {
+                    format!("%{c:02X}")
+                }
+            })
+            .collect();
+        let link = format!("[{label}]({destination})");
+        let path = page.dir.join(&file);
+        files::create_empty(&path)?;
+        self.active = index;
+        self.set_selection(ctx, a, b);
+        self.insert(ctx, &link);
+        self.new_page = None;
+        if let Some(browser) = &mut self.browser {
+            browser.reload();
+        }
+        Ok(())
+    }
+
+    fn has_modal(&self) -> bool {
+        !self.close_queue.is_empty()
+            || self.error.is_some()
+            || self.about
+            || self.settings
+            || self.new_page.is_some()
+            || self.new_file.is_some()
+            || self.delete_file.is_some()
+    }
+
+    fn formatting_bar(&self, ui: &mut Ui, acts: &mut Vec<Action>) {
+        let enabled = self.docs.get(self.active).is_some_and(|d| d.syntax.is_none()) && !self.has_modal();
+        ui.add_enabled_ui(enabled, |ui| {
+            let buttons = formatting_buttons();
+            let width = ui.available_width();
+            let columns = (((width + 3.0) / 39.0).floor() as usize).max(1);
+            for row in buttons.chunks(columns) {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 3.0;
+                    let row_width = row.len() as f32 * 39.0 - 3.0;
+                    ui.add_space(((width - row_width) * 0.5).max(0.0));
+                    for &(icon, label, action) in row {
+                        let shortcut = shortcuts()
+                            .iter()
+                            .find(|(_, _, a)| *a == action)
+                            .map(|(m, k, _)| shortcut_label(*m, *k))
+                            .unwrap_or_default();
+                        let tooltip = format!("{}  {shortcut}", self.t(label));
+                        if formatting_button(ui, icon, action).on_hover_text(tooltip).clicked() {
+                            acts.push(action);
+                        }
+                    }
+                });
+            }
+        });
     }
 
     fn primary_text(&mut self) -> Option<String> {
@@ -1265,7 +1511,9 @@ impl App {
         match a {
             Action::New => self.new_doc(),
             Action::Open => {
-                let mut dlg = rfd::FileDialog::new().add_filter("Markdown", &["md", "markdown", "txt"]);
+                let mut dlg = rfd::FileDialog::new()
+                    .add_filter(tr(self.cfg.lang, "Files"), &["*"])
+                    .add_filter("Markdown", &["md", "markdown", "txt"]);
                 if let Some(d) = self.docs.get(self.active).and_then(Doc::dir) {
                     dlg = dlg.set_directory(d);
                 }
@@ -1310,12 +1558,14 @@ impl App {
                     }
                 }
             }
+            Action::NewPage => self.begin_new_page(ctx),
             Action::Insert => self.insert_image_file(ctx),
             Action::Preferences => self.settings = true,
             Action::About => self.about = true,
             Action::Undo => self.undo_redo(ctx, false),
             Action::Redo => self.undo_redo(ctx, true),
             Action::Files => self.cfg.files = !self.cfg.files,
+            Action::CycleWidth => self.cfg.view_width = (self.cfg.view_width + 1) % 4,
             Action::Exit => self.exit(ctx),
             Action::PastePrimary => {
                 if let Some(t) = self.primary_text() {
@@ -1327,7 +1577,7 @@ impl App {
                     self.open_path(p);
                 }
             }
-            // Markdown formatting makes no sense in a config file.
+            // Markdown formatting is only available for Markdown documents.
             Action::Fmt(f) if self.docs.get(self.active).is_some_and(|d| d.syntax.is_none()) => {
                 self.apply_fmt(ctx, f);
             }
@@ -1414,7 +1664,13 @@ impl App {
                 item(ui, acts, t("Preferences…"), Action::Preferences);
             });
             ui.menu_button(t("View"), |ui| {
-                ui.checkbox(&mut self.cfg.optimize, t("Optimize"));
+                ui.menu_button(format!("{} ({})", t("View width"), label(Action::CycleWidth)), |ui| {
+                    for (index, name) in VIEW_WIDTHS.iter().enumerate() {
+                        if ui.selectable_value(&mut self.cfg.view_width, index as u8, t(name)).clicked() {
+                            ui.close();
+                        }
+                    }
+                });
                 ui.checkbox(&mut self.cfg.line_numbers, t("Line numbers"));
                 ui.checkbox(&mut self.cfg.inline_title, t("Inline title"));
                 ui.checkbox(&mut self.cfg.files, t("Files")).on_hover_text(label(Action::Files));
@@ -1533,19 +1789,26 @@ impl App {
             return (None, None);
         }
 
-        let Self { docs, active, images, cfg, find, scroll_to, scroll_pending, .. } = self;
+        if self.docs.get(self.active).is_some_and(|d| highlight::Analysis::requires_worker(&d.text, d.syntax))
+            && self.syntax_worker.is_none()
+        {
+            self.syntax_worker = Some(highlight::Worker::new(ctx.clone()));
+        }
+        let Self { docs, active, images, cfg, find, scroll_to, scroll_pending, syntax_worker, .. } = self;
         let doc = &mut docs[*active];
         let id = doc.edit_id();
         let dir = doc.dir();
         let syntax = doc.syntax;
         let gutter = if cfg.line_numbers { 48.0 } else { 0.0 };
         let full = ui.available_width();
-        let col_w = if cfg.optimize { (full - gutter - 48.0).min(MAX_LINE_W) } else { full - gutter - 48.0 }.max(100.0);
-        let left = if cfg.optimize { ((full - col_w) / 2.0).max(gutter + 16.0) } else { gutter + 24.0 };
+        let (col_w, left) = view_geometry(full, gutter, cfg.view_width);
         let mut clicked_link = None;
         let mut middle = None;
         let now = self.now;
-        let look = cfg.look();
+        let mut look = cfg.look();
+        if syntax.is_some() {
+            look.size += 1.5;
+        }
         let font = cfg.font.clone();
 
         let mut area = ScrollArea::vertical().id_salt(("scroll", doc.id)).auto_shrink(false);
@@ -1576,6 +1839,12 @@ impl App {
                         TextEditState::load(&ctx, id).and_then(|s| s.cursor.char_range()).map(|r| r.primary.index.0);
                     let ppp = ctx.pixels_per_point();
                     let cache = &mut doc.cache;
+                    let analysis = &mut doc.analysis;
+                    let code_layout = &mut doc.code_layout;
+                    let mut font_key = std::collections::hash_map::DefaultHasher::new();
+                    (&font, cfg.lang.code()).hash(&mut font_key);
+                    code_layout.set_fonts(font_key.finish());
+                    let document_id = doc.id;
                     let mut img_size = |src: &str| {
                         let key = image_key(dir.as_deref(), src)?;
                         let entry = images.entry(key.clone()).or_insert_with(|| load_image(&ctx, dir.as_deref(), src));
@@ -1583,10 +1852,21 @@ impl App {
                     };
                     let mut layouter = |ui: &Ui, buf: &dyn TextBuffer, wrap: f32| {
                         let text = buf.as_str();
-                        let line = cursor_ci.map(|c| text.chars().take(c).filter(|ch| *ch == '\n').count());
+                        analysis.update(document_id, text, syntax, syntax_worker.as_ref());
+                        let line = syntax
+                            .is_none()
+                            .then(|| cursor_ci.map(|c| text.chars().take(c).filter(|ch| *ch == '\n').count()))
+                            .flatten();
                         let mut h = std::collections::hash_map::DefaultHasher::new();
                         let l = &look;
-                        (text, line, wrap.to_bits(), ppp.to_bits(), l.size.to_bits(), l.line_height.to_bits())
+                        (
+                            analysis.revision(),
+                            line,
+                            wrap.to_bits(),
+                            ppp.to_bits(),
+                            l.size.to_bits(),
+                            l.line_height.to_bits(),
+                        )
                             .hash(&mut h);
                         (l.weight, l.bold_weight, l.code_weight, &font, syntax).hash(&mut h);
                         let key = h.finish();
@@ -1595,8 +1875,28 @@ impl App {
                         }
                         let mut layout = |job| ui.ctx().fonts_mut(|f| f.layout_job(job));
                         let (galley, decos) = match syntax {
-                            Some(syntax) => (highlight::build(text, syntax, wrap, &look, ppp, &mut layout), vec![]),
-                            None => md::build(text, cursor_ci, wrap, &look, ppp, &mut img_size, &mut layout),
+                            Some(_) => (
+                                highlight::build_spans(
+                                    text,
+                                    analysis.spans(),
+                                    wrap,
+                                    &look,
+                                    ppp,
+                                    &mut layout,
+                                    code_layout,
+                                ),
+                                vec![],
+                            ),
+                            None => md::build_colored(
+                                text,
+                                cursor_ci,
+                                wrap,
+                                &look,
+                                ppp,
+                                analysis.spans(),
+                                &mut img_size,
+                                &mut layout,
+                            ),
                         };
                         *cache = Some(Cache { key, line, galley: galley.clone(), decos });
                         galley
@@ -1632,9 +1932,12 @@ impl App {
 
                     let Some(cache) = &doc.cache else { return };
                     // Re-layout next frame when the cursor moved to another line (to reveal its markers).
-                    let new_line = out
-                        .cursor_range
-                        .map(|r| doc.text.chars().take(r.primary.index.0).filter(|ch| *ch == '\n').count());
+                    let new_line = if syntax.is_none() {
+                        out.cursor_range
+                            .map(|r| doc.text.chars().take(r.primary.index.0).filter(|ch| *ch == '\n').count())
+                    } else {
+                        None
+                    };
                     if new_line.is_some() && new_line != cache.line {
                         ctx.request_repaint();
                     }
@@ -1774,6 +2077,50 @@ impl App {
             });
             if r.inner || r.should_close() {
                 self.error = None;
+            }
+        }
+
+        if let Some(page) = &mut self.new_page {
+            let mut choice = None;
+            let r = dialog(ctx, "new_page_modal", t("New linked page"), 420.0, |ui| {
+                ui.label(t("File name:"));
+                let response =
+                    ui.add(TextEdit::singleline(&mut page.name).hint_text("note.md").desired_width(f32::INFINITY));
+                if page.focus {
+                    response.request_focus();
+                    page.focus = false;
+                }
+                if let Some(error) = &page.error {
+                    ui.colored_label(Color32::LIGHT_RED, error);
+                }
+                ui.add_space(16.0);
+                centered_row(ui, |ui| {
+                    if ui.button(t("Save")).clicked() || enter {
+                        choice = Some(true);
+                    }
+                    if ui.button(t("Cancel")).clicked() {
+                        choice = Some(false);
+                    }
+                });
+            });
+            if r.should_close() || ctx.input(|i| i.key_pressed(Key::Escape)) {
+                choice = Some(false);
+            }
+            match choice {
+                Some(true) => {
+                    if let Err(error) = self.create_linked_page(ctx)
+                        && let Some(page) = &mut self.new_page
+                    {
+                        page.error = Some(error);
+                    }
+                }
+                Some(false) => {
+                    self.new_page = None;
+                    if let Some((a, b)) = self.selection(ctx) {
+                        self.set_selection(ctx, a, b);
+                    }
+                }
+                None => {}
             }
         }
 
@@ -2015,15 +2362,16 @@ fn paint_decos(cx: &DecoCx, decos: &[Deco], bgs: &mut Vec<Shape>) -> DecoEvents 
                 );
                 bgs.push(Shape::rect_filled(r, 4.0, md::CODE_BG));
             }
-            Deco::Quote { start, end, level, color } => {
+            Deco::Quote { start, end, level, indent, color } => {
                 let (r1, r2) = (at(*start), at(*end));
                 for k in 0..*level {
-                    let x = cx.pos.x + k as f32 * cx.look.indent() + 1.0;
+                    let x = cx.pos.x + (indent + k) as f32 * cx.look.indent() + 1.0;
                     let r = Rect::from_min_max(pos2(x, r1.min.y), pos2(x + 2.0, r2.max.y));
                     cx.painter.rect_filled(r, 0.0, color.unwrap_or(md::ACCENT));
                 }
                 if let Some(c) = color {
-                    let r = Rect::from_min_max(pos2(cx.pos.x, r1.min.y), pos2(cx.pos.x + cx.col_w, r2.max.y));
+                    let left = cx.pos.x + *indent as f32 * cx.look.indent();
+                    let r = Rect::from_min_max(pos2(left, r1.min.y), pos2(cx.pos.x + cx.col_w, r2.max.y));
                     bgs.push(Shape::rect_filled(r, 0.0, c.gamma_multiply(0.1)));
                 }
             }
@@ -2237,32 +2585,18 @@ fn move_to_trash(path: &Path) -> Result<(), String> {
 /// Parses the start of a list or quote line: (prefix to repeat — indentation and `> `,
 /// the marker for the next item, byte where the item text starts).
 fn list_prefix(line: &str) -> Option<(String, String, usize)> {
-    let b = line.as_bytes();
-    let mut i = b.iter().take_while(|c| **c == b' ' || **c == b'\t').count();
-    let mut quoted = false;
-    while b.get(i) == Some(&b'>') {
-        quoted = true;
-        i += if b.get(i + 1) == Some(&b' ') { 2 } else { 1 };
-    }
-    let ws = b[i..].iter().take_while(|c| **c == b' ' || **c == b'\t').count();
-    let prefix = line[..i + ws].to_owned();
-    let rest = &line[i + ws..];
-    for task in ["- [ ] ", "- [x] ", "- [X] "] {
-        if rest.starts_with(task) {
-            return Some((prefix, "- [ ] ".into(), i + ws + task.len()));
+    let p = markdown::prefix(line);
+    let prefix = line[..p.marker_start].to_owned();
+    let next = match p.marker {
+        Some(ListMarker::Task(_)) => "- [ ] ".to_owned(),
+        Some(ListMarker::Bullet(marker)) if p.content_start > p.marker_start + 1 => format!("{} ", marker as char),
+        Some(ListMarker::Ordered { digits, delimiter }) => {
+            let n: u64 = line[p.marker_start..p.marker_start + digits].parse().ok()?;
+            format!("{}{} ", n.saturating_add(1), delimiter as char)
         }
-    }
-    for bullet in ["- ", "* ", "+ "] {
-        if rest.starts_with(bullet) {
-            return Some((prefix, bullet.into(), i + ws + 2));
-        }
-    }
-    let d = rest.bytes().take_while(|c| c.is_ascii_digit()).count();
-    if d > 0 && matches!(rest.as_bytes().get(d), Some(b'.' | b')')) && rest.as_bytes().get(d + 1) == Some(&b' ') {
-        let n: u64 = rest[..d].parse().ok()?;
-        return Some((prefix, format!("{}{} ", n.saturating_add(1), &rest[d..d + 1]), i + ws + d + 2));
-    }
-    quoted.then(|| (line[..i].to_owned(), String::new(), i))
+        _ => return (p.quotes > 0).then(|| (line[..p.quote_end].to_owned(), String::new(), p.quote_end)),
+    };
+    Some((prefix, next, p.content_start))
 }
 
 /// Byte replacements for sibling numbering; child lists keep independent counters.
@@ -2270,41 +2604,41 @@ fn numbered_edits(text: &str) -> Vec<(usize, usize, String)> {
     let mut edits = vec![];
     let mut stack: Vec<(String, char, u64)> = vec![];
     let mut offset = 0;
-    let mut fence: Option<(u8, usize)> = None;
-    let mut front = text.starts_with("---\n");
+    let mut fence: Option<Fence> = None;
+    let front_end = markdown::front_matter_end(text);
     for (li, raw) in text.split_inclusive('\n').enumerate() {
         let line = raw.trim_end_matches(['\n', '\r']);
         let t = line.trim_start();
-        let run = t.bytes().take_while(|b| Some(b) == t.as_bytes().first()).count();
-        if front {
-            if li > 0 && matches!(t, "---" | "...") {
-                front = false;
-            }
+        if front_end.is_some_and(|end| li <= end) {
             offset += raw.len();
             continue;
         }
-        if let Some((ch, count)) = fence {
-            if t.as_bytes().first() == Some(&ch) && run >= count && t[run..].trim().is_empty() {
+        if let Some(open) = fence {
+            if open.closes(t) {
                 fence = None;
             }
             offset += raw.len();
             continue;
         }
-        if run >= 3 && matches!(t.as_bytes().first(), Some(b'`' | b'~')) {
-            fence = Some((t.as_bytes()[0], run));
+        if let Some(open) = Fence::opening(t) {
+            fence = Some(open);
             stack.clear();
-        } else if let Some((prefix, next, _rest)) = list_prefix(line) {
-            if !next.is_empty() {
+        } else if let parsed = markdown::prefix(line)
+            && (parsed.marker.is_some() || parsed.quotes > 0)
+        {
+            if parsed.marker.is_some() {
+                let prefix = &line[..parsed.marker_start];
                 // Match visual indentation, including mixed tabs/spaces produced by Tab.
-                let key = prefix.replace('\t', "  ");
+                let key = markdown::prefix_key(prefix);
                 while stack.last().is_some_and(|(p, _, _)| p != &key && !key.starts_with(p.as_str())) {
                     stack.pop();
                 }
-                let body = &line[prefix.len()..];
-                let digits = body.bytes().take_while(u8::is_ascii_digit).count();
-                if digits > 0 {
-                    let delim = body.as_bytes()[digits] as char;
-                    let number = body[..digits].parse::<u64>().unwrap_or(1);
+                if let Some(ListMarker::Ordered { digits, delimiter }) = parsed.marker {
+                    let delim = delimiter as char;
+                    let Ok(number) = line[parsed.marker_start..parsed.marker_start + digits].parse::<u64>() else {
+                        offset += raw.len();
+                        continue;
+                    };
                     let expected = match stack.last_mut() {
                         Some((p, d, n)) if *p == key && *d == delim => {
                             *n = n.saturating_add(1);
@@ -2338,13 +2672,10 @@ fn numbered_edits(text: &str) -> Vec<(usize, usize, String)> {
 fn toggle_line(l: &str, f: Fmt) -> String {
     let indent_len = l.len() - l.trim_start().len();
     let (indent, body) = l.split_at(indent_len);
-    let strip_task = |s: &str| -> Option<(bool, String)> {
-        for (p, c) in [("- [ ] ", false), ("- [x] ", true), ("- [X] ", true)] {
-            if let Some(r) = s.strip_prefix(p) {
-                return Some((c, r.to_owned()));
-            }
-        }
-        None
+    let parsed = markdown::prefix(body);
+    let task = match parsed.marker {
+        Some(ListMarker::Task(checked)) if parsed.quotes == 0 => Some((checked, &body[parsed.content_start..])),
+        _ => None,
     };
     match f {
         Fmt::Heading(n) => {
@@ -2353,21 +2684,35 @@ fn toggle_line(l: &str, f: Fmt) -> String {
             let rest = if level > 0 { &body[level + 1..] } else { body };
             if n == 0 || level == n as usize { rest.to_owned() } else { format!("{} {rest}", "#".repeat(n as usize)) }
         }
-        Fmt::Bullet => match strip_task(body) {
+        Fmt::Bullet => match task {
             Some((_, r)) => format!("{indent}- {r}"),
-            None => match body.strip_prefix("- ") {
-                Some(r) => format!("{indent}{r}"),
-                None => format!("{indent}- {body}"),
-            },
+            None if parsed.quotes == 0 && matches!(parsed.marker, Some(ListMarker::Bullet(_))) => {
+                format!("{indent}{}", &body[parsed.content_start..])
+            }
+            None => format!("{indent}- {body}"),
         },
-        Fmt::Task => match strip_task(body) {
+        Fmt::Ordered => {
+            if parsed.quotes == 0 && matches!(parsed.marker, Some(ListMarker::Ordered { .. })) {
+                format!("{indent}{}", &body[parsed.content_start..])
+            } else {
+                format!("{indent}1. {body}")
+            }
+        }
+        Fmt::Task => match task {
             Some((false, r)) => format!("{indent}- [x] {r}"),
             Some((true, r)) => format!("{indent}{r}"),
-            None => format!("{indent}- [ ] {}", body.strip_prefix("- ").unwrap_or(body)),
+            None => {
+                let rest = if parsed.quotes == 0 && matches!(parsed.marker, Some(ListMarker::Bullet(_))) {
+                    &body[parsed.content_start..]
+                } else {
+                    body
+                };
+                format!("{indent}- [ ] {rest}")
+            }
         },
-        Fmt::Quote => match l.strip_prefix("> ") {
-            Some(r) => r.to_owned(),
-            None => format!("> {l}"),
+        Fmt::Quote => match body.strip_prefix("> ") {
+            Some(r) => format!("{indent}{r}"),
+            None => format!("{indent}> {body}"),
         },
         _ => l.to_owned(),
     }
@@ -2377,6 +2722,19 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.now = ctx.input(|i| i.time);
+        if let Some(worker) = &self.syntax_worker {
+            for output in worker.drain() {
+                if let Some(doc) = self.docs.iter_mut().find(|doc| doc.id == output.id) {
+                    doc.analysis.accept(output);
+                }
+            }
+        }
+
+        for file in ctx.input_mut(|i| std::mem::take(&mut i.raw.dropped_files)) {
+            if file.path().is_file() {
+                self.open_path(file.path().to_owned());
+            }
+        }
 
         while let Ok(files) = self.rx.try_recv() {
             for f in files {
@@ -2390,12 +2748,7 @@ impl eframe::App for App {
             self.exit(&ctx);
         }
 
-        let modal_open = !self.close_queue.is_empty()
-            || self.error.is_some()
-            || self.about
-            || self.settings
-            || self.new_file.is_some()
-            || self.delete_file.is_some();
+        let modal_open = self.has_modal();
         let mut acts = vec![];
         if !modal_open {
             for &(m, k, a) in shortcuts() {
@@ -2446,6 +2799,9 @@ impl eframe::App for App {
         Panel::top("tabs")
             .frame(egui::Frame::NONE.fill(CHROME).inner_margin(Margin { left: 6, right: 6, top: 4, bottom: 0 }))
             .show(ui, |ui| self.tabs(ui));
+        Panel::top("formatting")
+            .frame(egui::Frame::NONE.fill(CHROME).inner_margin(Margin::symmetric(8, 5)))
+            .show(ui, |ui| self.formatting_bar(ui, &mut acts));
         let (link, middle) = CentralPanel::default()
             .frame(egui::Frame::NONE.fill(md::BG).inner_margin(Margin::symmetric(8, 4)))
             .show(ui, |ui| self.editor(ui))
@@ -2508,6 +2864,438 @@ impl eframe::App for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linked_page_shortcut_enter_creates_file_and_followable_link() {
+        let dir = std::env::temp_dir().join(format!("mdedit-linked-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (mut app, ctx) = app_with("Zażółć [tekst]");
+        app.docs[0].path = Some(dir.join("source.md"));
+        frame(&mut app, &ctx, vec![]);
+        let end = app.docs[0].text.chars().count();
+        app.set_selection(&ctx, 0, end);
+        frame(&mut app, &ctx, vec![key(Key::K, Modifiers::COMMAND | Modifiers::SHIFT)]);
+        assert_eq!(app.docs[0].text, "Zażółć [tekst]");
+        app.new_page.as_mut().unwrap().name = "Żółw (test) #1 %20".into();
+        frame(&mut app, &ctx, vec![key(Key::Enter, Modifiers::NONE)]);
+        assert!(app.new_page.is_none());
+        let target = dir.join("Żółw (test) #1 %20.md");
+        assert!(target.is_file());
+        let (_, decorations) = layout(&app.docs[0].text, None, 600.0);
+        let url = decorations
+            .iter()
+            .find_map(|d| match d {
+                Deco::Link { url, .. } => Some(url),
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(resolve(Some(&dir), url), Some(target.clone()));
+        app.open_link(url);
+        assert_eq!(app.docs[app.active].path.as_ref(), Some(&target));
+        app.active = 0;
+        app.undo_redo(&ctx, false);
+        assert_eq!(app.docs[0].text, "Zażółć [tekst]");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn linked_page_preserves_existing_files_and_rejects_paths() {
+        let dir = std::env::temp_dir().join(format!("mdedit-linked-refuse-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("existing.md"), "keep").unwrap();
+        let (mut app, ctx) = app_with("text");
+        app.docs[0].path = Some(dir.join("source.md"));
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 0, 4);
+        app.begin_new_page(&ctx);
+        for name in ["existing.md", "../outside", "sub/file", "sub\\file", "", ".", "bad:name"] {
+            app.new_page.as_mut().unwrap().name = name.into();
+            assert!(app.create_linked_page(&ctx).is_err(), "{name}");
+            assert_eq!(app.docs[0].text, "text");
+        }
+        assert_eq!(std::fs::read_to_string(dir.join("existing.md")).unwrap(), "keep");
+        frame(&mut app, &ctx, vec![key(Key::Escape, Modifiers::NONE)]);
+        assert!(app.new_page.is_none());
+        assert_eq!(app.docs[0].text, "text");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn linked_page_uses_browser_folder_for_unsaved_document() {
+        let dir = std::env::temp_dir().join(format!("mdedit-linked-unsaved-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (mut app, ctx) = app_with("");
+        app.browser = Some(files::Browser::new(dir.clone()));
+        frame(&mut app, &ctx, vec![]);
+        app.begin_new_page(&ctx);
+        app.new_page.as_mut().unwrap().name = "new page".into();
+        app.create_linked_page(&ctx).unwrap();
+        assert_eq!(app.docs[0].text, "[new page](new%20page.md)");
+        assert!(dir.join("new page.md").is_file());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn clicking_toolbar_keeps_editor_selection() {
+        let (mut app, ctx) = app_with("hello world");
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 0, 5);
+        let mut ef = eframe::Frame::_new_kittest();
+        let mut output = ctx.run_ui(
+            RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 800.0))), ..Default::default() },
+            |ui| app.ui(ui, &mut ef),
+        );
+        let button = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                Shape::Text(text) if text.galley.job.text == "B" => Some(text.pos + text.galley.size() * 0.5),
+                _ => None,
+            })
+            .unwrap();
+        output.textures_delta.clear();
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                &ctx,
+                vec![
+                    Event::PointerMoved(button),
+                    Event::PointerButton {
+                        pos: button,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        assert_eq!(app.docs[0].text, "**hello** world");
+    }
+
+    #[test]
+    fn toolbar_covers_all_formatting_and_numbered_lists() {
+        let buttons = formatting_buttons();
+        for (_, _, action) in shortcuts() {
+            if matches!(action, Action::Fmt(_) | Action::Insert | Action::NewPage) {
+                assert!(buttons.iter().any(|(_, _, a)| a == action));
+            }
+        }
+        assert!(buttons.iter().any(|(_, _, a)| *a == Action::Fmt(Fmt::Ordered)));
+        let (mut app, ctx) = app_with("one\ntwo");
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 0, 7);
+        app.run(&ctx, Action::Fmt(Fmt::Ordered));
+        assert_eq!(app.docs[0].text, "1. one\n2. two");
+        app.run(&ctx, Action::Fmt(Fmt::Ordered));
+        assert_eq!(app.docs[0].text, "one\ntwo");
+    }
+
+    #[test]
+    fn quote_format_preserves_indentation_and_toggles_back() {
+        let text = "  quoted\n\t\tdeeper";
+        let (mut app, ctx) = app_with(text);
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 0, text.chars().count());
+        app.run(&ctx, Action::Fmt(Fmt::Quote));
+        assert_eq!(app.docs[0].text, "  > quoted\n\t\t> deeper");
+        app.run(&ctx, Action::Fmt(Fmt::Quote));
+        assert_eq!(app.docs[0].text, text);
+    }
+
+    #[test]
+    fn indented_quotes_align_bars_text_and_wrapped_rows() {
+        for (prefix, indent, quotes) in
+            [("> ", 0, 1), ("  > ", 1, 1), ("\t> ", 1, 1), ("    > > ", 2, 2), ("\t\t> ", 2, 1)]
+        {
+            let text = format!("{prefix}{}", "word ".repeat(30));
+            for cursor in [None, Some(0)] {
+                let (galley, decos) = layout(&text, cursor, 200.0);
+                assert!(decos.iter().any(|d| matches!(d, Deco::Quote { indent: i, level, .. }
+                    if *i == indent && *level == quotes)));
+                let expected = (indent + quotes) as f32 * LOOK.indent();
+                let x = galley.pos_from_cursor(CCursor::new(prefix.chars().count())).min.x;
+                assert!((x - expected).abs() < 1.0, "{prefix:?}: {x} vs {expected}");
+                for row in &galley.rows[1..] {
+                    assert!((row.pos.x - expected).abs() < 1.0);
+                }
+            }
+        }
+        let (_, decos) = layout("- item\n  > quote\n    > [!note] nested callout", None, 500.0);
+        assert!(decos.iter().any(|d| matches!(d, Deco::Quote { indent: 1, level: 1, .. })));
+        assert!(decos.iter().any(|d| matches!(d, Deco::Quote { indent: 2, color: Some(_), .. })));
+    }
+
+    #[test]
+    fn numbering_and_layout_agree_on_odd_indents_and_long_fences() {
+        let text = "1. parent\n  1. first\n   9. second\n\t8. third";
+        let mut normalized = text.to_owned();
+        for (a, b, replacement) in numbered_edits(text).into_iter().rev() {
+            normalized.replace_range(a..b, &replacement);
+        }
+        assert_eq!(normalized, "1. parent\n  1. first\n   2. second\n\t3. third");
+        let (g, _) = layout(&normalized, None, 500.0);
+        let mut offset = 0;
+        for (i, line) in normalized.lines().enumerate() {
+            let parsed = markdown::prefix(line);
+            if i > 0 {
+                let x = g.pos_from_cursor(CCursor::new(offset + parsed.content_start)).min.x;
+                assert!((x - 2.0 * LOOK.indent()).abs() < 1.0);
+            }
+            offset += line.len() + 1;
+        }
+        let code = "````md\n1. code\n```\n9. still code\n````\n1. item\n9. item";
+        let edits = numbered_edits(code);
+        assert_eq!(edits.len(), 1);
+        assert_eq!(edits[0].0, code.rfind("9.").unwrap());
+        let (_, decos) = layout(code, None, 500.0);
+        assert_eq!(decos.iter().filter(|d| matches!(d, Deco::Code(_, _))).count(), 1);
+        for header in ["---\n1. header\n9. header\n...\n", "---\n1. header\n9. header\n---\n"] {
+            let document = format!("{header}1. item\n9. item");
+            assert_eq!(numbered_edits(&document).len(), 1);
+        }
+        assert_eq!(numbered_edits("---\n1. item\n9. item").len(), 1);
+    }
+
+    #[test]
+    fn browser_creation_reuses_filename_validation_and_never_overwrites() {
+        let dir = std::env::temp_dir().join(format!("mdedit-shared-create-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("existing.md"), "keep").unwrap();
+        let (mut app, _ctx) = app_with("");
+        app.browser = Some(files::Browser::new(dir.clone()));
+        for name in ["../escape", r"..\escape", "a/b", "bad:name"] {
+            app.new_file = Some(name.into());
+            app.create_file();
+            assert!(app.docs[0].path.is_none());
+        }
+        app.new_file = Some("existing.md".into());
+        app.create_file();
+        assert!(app.error.is_some());
+        assert_eq!(std::fs::read_to_string(dir.join("existing.md")).unwrap(), "keep");
+        app.new_file = Some("new page".into());
+        app.create_file();
+        assert!(dir.join("new page.md").is_file());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    #[ignore = "manual release-mode latency benchmark"]
+    fn benchmark_editor_syntax_latency() {
+        use std::time::Instant;
+        let sample = "if [[ -n $HOME ]]; then printf '%s' \"$HOME\"; fi # żółw🙂\n";
+        for bytes in [10_000, 100_000, 1_000_000] {
+            let text = sample.repeat(bytes / sample.len() + 1);
+            let (mut app, ctx) = app_with(&text);
+            app.docs[0].syntax = Some(Syntax::Bash);
+            app.cfg.files = false;
+            app.cfg.inline_title = false;
+            let start = Instant::now();
+            frame(&mut app, &ctx, vec![]);
+            let cold = start.elapsed();
+            let mut times = Vec::new();
+            for index in 0..40 {
+                let c = sample.chars().count() * index;
+                app.set_selection(&ctx, c, c);
+                let start = Instant::now();
+                frame(&mut app, &ctx, vec![]);
+                times.push(start.elapsed().as_secs_f64() * 1000.0);
+            }
+            times.sort_by(f64::total_cmp);
+            let (p95, p99) = (times[37], times[39]);
+            app.set_selection(&ctx, text.chars().count() / 2, text.chars().count() / 2);
+            let start = Instant::now();
+            frame(&mut app, &ctx, vec![Event::Text("x".into())]);
+            eprintln!(
+                "editor bytes={} cold_ms={:.3} cursor_p95_ms={p95:.3} cursor_p99_ms={p99:.3} edit_ms={:.3}",
+                text.len(),
+                cold.as_secs_f64() * 1000.0,
+                start.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+    }
+
+    #[test]
+    fn code_cursor_and_wrapping_do_not_reanalyze_syntax() {
+        let (mut app, ctx) = app_with("echo first\necho second");
+        app.docs[0].syntax = Some(Syntax::Bash);
+        frame(&mut app, &ctx, vec![]);
+        let galley = app.docs[0].cache.as_ref().unwrap().galley.clone();
+        let revision = app.docs[0].analysis.revision();
+        app.set_selection(&ctx, 12, 12);
+        frame(&mut app, &ctx, vec![]);
+        assert!(Arc::ptr_eq(&galley, &app.docs[0].cache.as_ref().unwrap().galley));
+        let mut f = eframe::Frame::_new_kittest();
+        ctx.run_ui(
+            RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(600.0, 800.0))), ..Default::default() },
+            |ui| app.ui(ui, &mut f),
+        )
+        .textures_delta
+        .clear();
+        assert_eq!(app.docs[0].analysis.revision(), revision);
+        assert!(!Arc::ptr_eq(&galley, &app.docs[0].cache.as_ref().unwrap().galley));
+    }
+
+    #[test]
+    fn dropped_html_opens_and_colors_long_lines() {
+        let dir = std::env::temp_dir().join(format!("mdedit-drop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("page.html");
+        let text =
+            format!("<!doctype html><html><body><!-- comment -->{}<b>hello</b></body></html>", "text ".repeat(4500));
+        std::fs::write(&path, &text).unwrap();
+        let (mut app, ctx) = app_with("");
+        #[derive(Debug)]
+        struct DropPath(PathBuf);
+        impl egui::DroppedFile for DropPath {
+            fn path(&self) -> &std::path::Path {
+                &self.0
+            }
+            fn bytes(&self) -> Result<Vec<u8>, String> {
+                std::fs::read(&self.0).map_err(|e| e.to_string())
+            }
+        }
+        let input = RawInput {
+            dropped_files: vec![
+                Arc::new(DropPath(dir.clone())),
+                Arc::new(DropPath(path.clone())),
+                Arc::new(DropPath(path.clone())),
+            ],
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 800.0))),
+            ..Default::default()
+        };
+        let mut f = eframe::Frame::_new_kittest();
+        ctx.run_ui(input, |ui| app.ui(ui, &mut f)).textures_delta.clear();
+        assert_eq!(app.docs.len(), 1);
+        assert_eq!(app.docs[0].path.as_ref(), Some(&path));
+        assert_eq!(app.docs[0].syntax, Some(Syntax::Html));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while app.docs[0].analysis.spans().is_empty() {
+            assert!(std::time::Instant::now() < deadline, "HTML analysis did not complete");
+            frame(&mut app, &ctx, vec![]);
+        }
+        let byte = text.find("comment").unwrap();
+        assert!(
+            app.docs[0]
+                .cache
+                .as_ref()
+                .unwrap()
+                .galley
+                .job
+                .sections
+                .iter()
+                .any(|s| s.byte_range.contains(&egui::text::ByteIndex(byte)) && s.format.color == md::DIM)
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn asynchronous_fenced_colors_reach_markdown_layout() {
+        let text = "żółw🙂\n```rust\n// code-comment\nfn demo() {}\n```\n";
+        let (mut app, ctx) = app_with(text);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while app.docs[0].analysis.spans().is_empty() {
+            assert!(std::time::Instant::now() < deadline, "syntax worker did not complete");
+            frame(&mut app, &ctx, vec![]);
+        }
+        let byte = text.find("code-comment").unwrap();
+        let galley = &app.docs[0].cache.as_ref().unwrap().galley;
+        assert!(
+            galley
+                .job
+                .sections
+                .iter()
+                .any(|s| s.byte_range.contains(&egui::text::ByteIndex(byte)) && s.format.color == md::DIM)
+        );
+    }
+
+    #[test]
+    #[ignore = "manual release-mode nested-language editor benchmark"]
+    fn benchmark_nested_editor_latency() {
+        use std::time::Instant;
+        let sample = "<style>body { color: red; }</style>\n<script>const message = 'żółw🙂'; console.log(message);</script>\n<div><?php echo $name; ?></div>\n";
+        for bytes in [10_000, 100_000, 1_000_000] {
+            let text = sample.repeat(bytes / sample.len() + 1);
+            let (mut app, ctx) = app_with(&text);
+            app.docs[0].syntax = Some(Syntax::Php);
+            app.cfg.files = false;
+            app.cfg.inline_title = false;
+            let start = Instant::now();
+            frame(&mut app, &ctx, vec![]);
+            let first = start.elapsed().as_secs_f64() * 1000.0;
+            while app.docs[0].analysis.spans().is_empty() {
+                frame(&mut app, &ctx, vec![]);
+            }
+            let colored = start.elapsed().as_secs_f64() * 1000.0;
+            let mut times = Vec::new();
+            for i in 0..40 {
+                let at = sample.chars().count() * i;
+                app.set_selection(&ctx, at, at);
+                let start = Instant::now();
+                frame(&mut app, &ctx, vec![]);
+                times.push(start.elapsed().as_secs_f64() * 1000.0);
+            }
+            times.sort_by(f64::total_cmp);
+            app.set_selection(&ctx, text.chars().count() / 2, text.chars().count() / 2);
+            let start = Instant::now();
+            frame(&mut app, &ctx, vec![Event::Text("x".into())]);
+            let first_edit = start.elapsed().as_secs_f64() * 1000.0;
+            let revision = app.docs[0].analysis.revision();
+            while app.docs[0].analysis.revision() == revision {
+                frame(&mut app, &ctx, vec![]);
+            }
+            eprintln!(
+                "nested_editor bytes={} first_frame_ms={first:.3} open_to_colors_ms={colored:.3} cursor_p95_ms={:.3} cursor_p99_ms={:.3} edit_first_frame_ms={first_edit:.3} edit_to_colors_ms={:.3}",
+                text.len(),
+                times[37],
+                times[39],
+                start.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+    }
+
+    #[test]
+    fn width_modes_cycle_persist_and_migrate_old_settings() {
+        let (mut app, ctx) = app_with("text");
+        frame(&mut app, &ctx, vec![]);
+        for expected in [1, 2, 3, 0] {
+            frame(
+                &mut app,
+                &ctx,
+                vec![
+                    Event::Key {
+                        key: Key::F2,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: Modifiers::NONE,
+                    },
+                    Event::Key {
+                        key: Key::F2,
+                        physical_key: None,
+                        pressed: false,
+                        repeat: false,
+                        modifiers: Modifiers::NONE,
+                    },
+                ],
+            );
+            assert_eq!(app.cfg.view_width, expected);
+            assert!(Config::default_text().parse(&app.cfg.to_text()) == app.cfg);
+        }
+        assert_eq!(Config::default_text().parse("optimize=0").view_width, 3);
+        assert_eq!(Config::default_text().parse("optimize=1").view_width, 0);
+        assert_eq!(Config::default_text().parse("view_width=2\noptimize=0").view_width, 2);
+        assert_eq!(Config::default_text().parse("view_width=99").view_width, 0);
+        for gutter in [0.0, 48.0] {
+            let modes: Vec<_> = (0..4).map(|i| view_geometry(1500.0, gutter, i)).collect();
+            assert_eq!(modes[0].0, MAX_LINE_W);
+            assert_eq!(modes[3], (1500.0 - gutter - 48.0, gutter + 24.0));
+            assert!(modes.windows(2).all(|pair| pair[0].0 < pair[1].0 && pair[0].1 > pair[1].1));
+            for i in 0..4 {
+                let (width, left) = view_geometry(400.0, gutter, i);
+                assert!(width >= 100.0 && left >= 0.0 && width + left <= 400.0);
+            }
+        }
+    }
 
     #[test]
     fn settings_round_trip_and_reject_bad_values() {
@@ -2722,11 +3510,31 @@ mod tests {
             let end = text.chars().count();
             app.set_selection(&ctx, end, end);
             frame(&mut app, &ctx, vec![key(Key::Enter, Modifiers::SHIFT)]);
-            assert_eq!(app.docs[0].text, format!("{text}\n{}", " ".repeat(marker.len())));
+            assert_eq!(app.docs[0].text, format!("{text}\n{}", " ".repeat(2)));
             frame(&mut app, &ctx, vec![Event::Text("ciąg dalszy".into())]);
             frame(&mut app, &ctx, vec![key(Key::Enter, Modifiers::NONE)]);
             assert!(app.docs[0].text.ends_with(if marker == "- " { "\n- " } else { "\n2. " }));
         }
+    }
+
+    #[test]
+    fn shift_enter_uses_one_compact_step_for_tasks_and_nested_lists() {
+        for prefix in ["", "\t", "\t\t"] {
+            for marker in ["- ", "12. ", "- [ ] ", "- [x] "] {
+                let text = format!("{prefix}{marker}text");
+                let (mut app, ctx) = app_with(&text);
+                frame(&mut app, &ctx, vec![]);
+                let end = app.docs[0].text.chars().count();
+                app.set_selection(&ctx, end, end);
+                for _ in 0..2 {
+                    frame(&mut app, &ctx, vec![key(Key::Enter, Modifiers::SHIFT)]);
+                    assert!(app.docs[0].text.ends_with(&format!("\n{prefix}  ")));
+                    frame(&mut app, &ctx, vec![Event::Text("continued".into())]);
+                }
+            }
+        }
+        let (galley, _) = layout("- [ ] text\n  continued", None, 600.0);
+        assert!((galley.rows[1].pos.x - LOOK.indent()).abs() < 1.0);
     }
 
     #[test]

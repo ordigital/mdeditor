@@ -1,0 +1,28 @@
+syntect init_ms=1.274
+syntax html: Some("HTML")
+syntax css: Some("CSS")
+syntax php: Some("PHP")
+syntax py: Some("Python")
+syntax rs: Some("Rust")
+syntax c: Some("C")
+syntax cpp: Some("C++")
+syntax go: Some("Go")
+syntax js: Some("JavaScript")
+syntax sh: Some("Bourne Again Shell (bash)")
+tree-sitter config_ms=28.334
+syntect html bytes=10074 ms=9.902 regions=3723
+tree-sitter html bytes=10074 ms=1.746 events=4381
+syntect php bytes=10074 ms=10.098 regions=4307
+tree-sitter php bytes=10074 ms=2.265 events=5768
+syntect html bytes=100050 ms=59.639 regions=36975
+tree-sitter html bytes=100050 ms=16.893 events=43501
+syntect php bytes=100050 ms=73.324 regions=42775
+tree-sitter php bytes=100050 ms=23.245 events=57276
+syntect html bytes=1000086 ms=592.823 regions=369597
+tree-sitter html bytes=1000086 ms=173.046 events=434821
+syntect php bytes=1000086 ms=729.432 regions=427573
+tree-sitter php bytes=1000086 ms=322.118 events=572514
+syntect html bytes=5000016 ms=2962.338 regions=1847832
+tree-sitter html bytes=5000016 ms=861.908 events=2173921
+syntect php bytes=5000016 ms=3668.513 regions=2137688
+tree-sitter php bytes=5000016 ms=3474.869 events=2862329

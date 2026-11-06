@@ -12,9 +12,15 @@ navigation:
   src/md.rs:
     responsibilities: [markdown_classification, paragraph_layout, inline_styles, decorations]
     symbols: [build, line, inline, fmt, Look, Deco, Kind]
-  src/highlight.rs: config_file_syntax_coloring
+  src/highlight.rs: [LANGUAGES, Syntax, Span, LayoutCache, shared_token_palette, monospace_layout, config_file_lexers]
+  src/highlight/engine.rs: [syntect_theme, incremental_checkpoints, nested_grammars, markdown_fenced_blocks]
+  src/highlight/worker.rs: [Worker, Analysis, revisioned_jobs, cancellation, provisional_utf8_remapping]
+  src/highlight/bash.rs: bash_lexer
   src/latex.rs: latex_to_unicode
-  src/files.rs: file_browser
+  src/markdown.rs:
+    responsibilities: [shared_list_and_quote_prefixes, visual_indent_keys, code_fences, front_matter]
+    symbols: [prefix, Prefix, ListMarker, INDENT_SPACES, indent_level, prefix_key, Fence, front_matter_end]
+  src/files.rs: [file_browser, file_name, create_empty]
   src/fonts.rs: embedded_and_system_fonts
   src/i18n.rs: translated_ui_strings
   src/base64.rs: embedded_image_codec
@@ -23,7 +29,7 @@ invariants:
   - 'Text is UTF-8; egui cursors count characters, replace_range uses bytes.'
   - 'Markdown is edited directly in TextEdit; src/md.rs supplies a cached galley and decorations.'
   - 'Programmatic edits use checkpoints; preserve selection and undo grouping.'
-  - 'Config files use highlight instead of Markdown; do not apply Markdown editing rules there.'
+  - 'Config files and Bash scripts use highlight instead of Markdown; do not apply Markdown editing rules there.'
   - 'Renderer lays out paragraphs separately and combines galleys to preserve hanging indents.'
 verification:
   format: cargo fmt --check
@@ -33,12 +39,12 @@ list_editing:
   implementation: {input: 'src/app.rs:list_keys', numbering: 'src/app.rs:numbered_edits + App.renumber_lists', layout: 'src/md.rs:line'}
   keys:
     Enter: 'next sibling; empty item exits list'
-    Shift+Enter: 'newline with spaces matching marker width, no new marker; Enter on continuation starts next sibling'
+    Shift+Enter: 'newline with two spaces beyond existing prefix, no new marker; Enter on continuation starts next sibling'
     Tab: 'indent item with a tab; nested lists render one level farther right'
     Shift+Tab: 'remove leading tab or up to two spaces (one rendered level)'
   numbering:
     trigger: 'changed Markdown before checkpoints and end-of-frame history recording'
-    rules: 'preserve first number at root; increment siblings; independent counters per visual indentation and delimiter; tabs equal two spaces; new nested lists start at one; ignore fenced code and initial YAML front matter'
+    rules: 'preserve first number at root; increment siblings; independent counters per visual indentation and delimiter; tabs equal two spaces; odd/even whitespace runs at the same visual level share a key; new nested lists start at one; ignore fenced code and initial YAML front matter'
     cursor: 'map both character endpoints through byte-based digit replacements'
     history: 'renumber together with edit; unchanged/opened documents and undo/redo snapshots remain untouched'
   layout: 'indented continuation text gets a hanging indent; empty marker gets normal line height'
@@ -52,7 +58,7 @@ list_editing:
     - inserting_and_deleting_numbered_items_updates_following_numbers
     - empty_bullet_height_and_continuation_indent_are_stable
   test_harness: 'egui headless run_ui outputs must clear textures_delta; texture tests declare max_texture_side'
-last_verification: {tests: 46, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
+last_verification: {tests: 76, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
 deployment:
   desktop_launcher: /home/adam/.local/share/applications/mdedit.desktop
   executable: target/release/mdedit
@@ -66,18 +72,108 @@ review_fixes:
   replacement: 'replace_one uses insert; replace_all uses App.checkpoint so normalization and replacement share undo history'
   tests: [replacement_keeps_numbering_and_undo_together, shift_tab_reverses_one_rendered_indentation_level]
 release_workflow:
-  current_version: 0.1.6
+  current_version: 0.1.7
   repository: ordigital/mdeditor
   branch: master
-  tag: v0.1.6
-  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.6
+  tag: v0.1.7
+  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.7
   instructions: packaging/RELEASING.md
-  notes: packaging/release-notes-0.1.6.md
-  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.6-x86_64.AppImage}
-  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.6-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE]}
+  notes: packaging/release-notes-0.1.7.md
+  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.7-x86_64.AppImage}
+  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.7-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE]}
   checksums: 'Both packages have basename.sha256 sidecars with relative filenames; verify from releases/.'
   publication: 'Annotated v<version> tag; atomic push of master and tag; gh release create --verify-tag --notes-file with two packages and two SHA-256 files.'
   caches: [releases/build/target, 'Docker volume mdedit-cargo', 'Docker volume mdedit-rustup']
   requirements: 'Docker daemon running and socket accessible, appimagetool, MinGW-w64, Rust Windows GNU target, Python >=3.11, gh authentication, GitHub SSH access.'
-  validation: '46 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.6.'
+  validation: '76 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.7.'
   git_policy: 'releases/ is ignored; commit source/index/scripts/notes and version bump, upload binaries as GitHub release assets; never force-push existing tags.'
+linked_pages_and_toolbar:
+  status: 'Included in release v0.1.7.'
+  input: 'Ctrl+Shift+K -> Action.NewPage -> begin_new_page -> NewPage modal -> create_linked_page'
+  confirmation: 'Enter or translated Save; Cancel/Escape leaves source and filesystem unchanged.'
+  directory: 'Document parent first; browser directory for unsaved documents; otherwise process cwd.'
+  filename: 'Selection prefills name; append .md unless .md/.markdown supplied; only a single valid filename; create_new prevents overwrite.'
+  source: 'Store document ID, character selection and original text; verify unchanged source before creating file; insert link as one undo step. Undo removes link but keeps created file.'
+  links: 'Escape label backslashes/brackets; percent-encode destination UTF-8 bytes. md.decode_path decodes once in app.resolve after fragment splitting; md.parse_link handles escaped/nested label brackets.'
+  toolbar: 'Panel.top(formatting) directly below tabs with CHROME menu background; centered rows of 36x28 buttons, wrapping by available width; translated tooltips and shortcuts; disabled for config files/no document/modals.'
+  actions: 'formatting_buttons routes existing actions: bold, italic, strike, inline code, highlight, link, new linked page, normal text, H1-H6, bullet/ordered/task lists, quote, image.'
+  numbered_format: 'Fmt.Ordered + toggle_line adds/removes markers; checkpoint numbering normalizes selected lines.'
+  localization: 'New linked page, Invalid file name and Numbered list added to all 22 non-English tables; English uses source keys.'
+  icon_rendering: "formatting_button draws highlight, links, bullet/ordered lists, checkbox, quote and image as painter geometry; remaining labels use ASCII. Highlight is a filled neutral rectangle without colored background."
+  continuation_indent: "Shift+Enter appends exactly two spaces after the original prefix for bullets, ordered lists and tasks at every nesting level; repeated breaks do not accumulate indentation."
+  regression_tests: [shift_enter_uses_one_compact_step_for_tasks_and_nested_lists, linked_page_shortcut_enter_creates_file_and_followable_link, linked_page_preserves_existing_files_and_rejects_paths, linked_page_uses_browser_folder_for_unsaved_document, toolbar_covers_all_formatting_and_numbered_lists, clicking_toolbar_keeps_editor_selection]
+quote_indentation:
+  formatting: 'src/app.rs:toggle_line(Fmt.Quote) adds/removes > after existing whitespace; never moves indentation inside the quote.'
+  layout: 'src/md.rs:line recognizes whitespace before > and stores its visual nesting steps in Deco.Quote.indent; text/wrapped rows include indent plus quote depth.'
+  painting: 'src/app.rs:paint_decos offsets quote bars and callout backgrounds by Deco.Quote.indent * Look.indent().'
+  tests: [quote_format_preserves_indentation_and_toggles_back, indented_quotes_align_bars_text_and_wrapped_rows]
+dry_kiss_refactor:
+  shared_syntax: 'src/markdown.rs owns list/quote prefix parsing for app.list_prefix, numbered_edits, toggle_line and md.line. Prefix indices are UTF-8 byte offsets; marker digits are parsed into u64 only by editing logic.'
+  indentation: 'INDENT_SPACES=2 governs tab width, visual levels, canonical numbering keys, Shift+Enter and Shift+Tab. Canonical keys exclude syntactic spaces after > and preserve nesting before/after quote markers.'
+  block_boundaries: 'Fence stores marker and full opening length; closes only on the same marker with at least that length. Rendering/numbering share Fence and front_matter_end; closed YAML headers accept --- or ..., unclosed --- remains normal Markdown.'
+  files: 'files.file_name validates a single trimmed filename for both creation dialogs; files.create_empty uses create_new to prevent overwrite. Browser retains existing extensions; linked Markdown pages append .md as before.'
+  toolbar: 'formatting_buttons returns a static slice; vector icons have empty text labels; ASCII text buttons retain labels. No per-frame Vec allocation.'
+  modals: 'App.has_modal is the shared gate for formatting buttons and editor keyboard shortcuts.'
+  tests: [prefixes_share_visual_indentation_and_marker_boundaries, code_fences_require_matching_character_and_at_least_opening_length, front_matter_requires_a_closing_delimiter, file_names_are_portable_single_components, numbering_and_layout_agree_on_odd_indents_and_long_fences, browser_creation_reuses_filename_validation_and_never_overwrites]
+bash_highlighting:
+  integration: 'Syntax.Bash in highlight.rs; dispatches to child module highlight/bash.rs using existing Class/paint/lines/palette/layout. No new dependencies or separate rendering path.'
+  detection: 'Case-insensitive .sh/.bash extensions and filenames .bashrc, .bash_profile, .bash_login, .bash_logout, .bash_aliases, .profile. Detection is filename-based, not shebang-based.'
+  scope: 'Plain-text shell files and fenced sh/bash/shell Markdown blocks via the common span pipeline.'
+  tokens: 'Control-flow keywords and common builtins, assignments, parameters, single/double/ANSI-C quotes, escapes, multiline strings, comments, numeric literals and operators/redirections.'
+  heredocs: 'FIFO delimiters, quote removal, <<- tab stripping; quoted delimiter bodies stay literal, unquoted bodies highlight parameters. Arithmetic shifts and <<< here-strings do not start heredocs.'
+  limits: 'Lightweight lexical coloring, not a complete Bash parser; nested command substitutions inside double-quoted strings are not recursively parsed.'
+  reference: https://www.gnu.org/software/bash/manual/bash.html
+  tests: [syntax_follows_the_file_name, bash_colors_control_flow_assignments_parameters_and_comments, bash_respects_quotes_escapes_and_multiline_strings, bash_heredocs_obey_quoted_delimiters_and_tab_stripping, bash_shifts_and_here_strings_do_not_start_heredocs, random_text_does_not_panic_and_lays_out]
+save_dialog_extensions:
+  implementation: 'src/app.rs:App.save'
+  filter: 'Use the all-files wildcard (*) with translated Files label; a native Markdown-only filter could force .md onto an explicitly typed .sh filename.'
+  filename: 'Save As suggests the complete existing filename, including its extension. New documents suggest Untitled.md.'
+  default: 'Append .md only when the path returned by the dialog has no extension; preserve explicit .sh/.bash/.xml/.json/.txt/etc. Syntax detection runs on the resulting path.'
+grammar_highlighting:
+  status: 'Included in release v0.1.7.'
+  decision: 'syntect 5.3 + regex-onig, default-syntaxes only; Tree-sitter stays in the standalone comparison tool, not the application dependency graph.'
+  supported: [html, css, php, python, rust, c, cpp, go, javascript]
+  registry: 'src/highlight.rs:LANGUAGES owns extensions/filenames/fenced aliases and engine grammar keys. Add Syntax variant + entry for future supported grammars; registry coverage test checks bundled grammar presence.'
+  nested: 'Syntect context stacks handle PHP/HTML/CSS/JS. Markdown bodies use the same engine; unknown fence aliases retain plain-code styling.'
+  architecture: docs/syntax-highlighting.md
+  measurements: docs/benchmarks/
+  comparison_tool: tools/syntax-probe/
+  lifecycle: 'One lazy syntax-analysis thread per App. Per-document Analysis sees the actual TextBuffer before galley lookup, revisions text/grammar changes, coalesces queued requests and accepts exact-revision results only.'
+  incremental: 'Checkpoint parser/highlighter states every 32 lines; rewind before changed text and stop only at an unchanged suffix with matching states. Unterminated constructs may require the full suffix.'
+  cache: 'Analysis independent of cursor/width/font. Galley key uses analysis revision, visual parameters and Markdown-only cursor line. LayoutCache retains per-line galleys across egui frame cache expiry.'
+  offsets: 'Span ranges are UTF-8 bytes. Provisional colors are remapped only over unchanged prefix/suffix text; new/replaced bytes stay plain until the worker corrects lexical context.'
+  limits: 'Code file/block with a line >262144 bytes falls back to plain text. Regex calls are not preempted internally. Whole-document TextEdit layout still costs about 28 ms for a 1 MB edit in the measured fixture.'
+  performance: 'Measured on i9-13900KF, release/headless egui: 1 MB code cursor p95 about 0.25-0.29 ms, previously 28-30 ms/frame; 100 KB nested PHP edit first frame 2.7 ms and colors 4.8 ms. See report for cold costs, RSS, fixtures and caveats.'
+  binaries: 'Local release: Linux 27806528 bytes, Windows 20505088 bytes; Oniguruma linked statically (no extra runtime DLL/shared library).'
+  verification: '76 regular tests plus 3 ignored manual release benchmarks; fmt; Clippy -D warnings; Linux + MinGW Windows release builds. Windows runtime not tested.'
+  commands: ['cargo test --release --offline --locked benchmark_ -- --ignored --nocapture --test-threads=1', 'cargo run --release --offline --locked --manifest-path tools/syntax-probe/Cargo.toml', 'cargo run --release --offline --locked --no-default-features --features onig --manifest-path tools/syntax-probe/Cargo.toml', 'cargo build --release --offline --locked --target x86_64-pc-windows-gnu']
+
+file_drop:
+  implementation: 'src/app.rs: App.ui consumes raw.dropped_files before editor rendering; native path via DroppedFile.path()'
+  behavior: 'Open regular dropped files through open_path; multiple files supported; existing tab reused; directories ignored; standard size/binary guards retained.'
+  regression: 'dropped_html_opens_and_colors_long_lines tests native drop, duplicate reuse and asynchronous HTML coloring on a >22 KB line.'
+  html_fix: 'Previous 16 KiB single-line guard suppressed minified HTML; now 256 KiB. Rebuild target/release/mdedit and restart all instances.'
+
+open_dialog_filters:
+  implementation: 'src/app.rs:App.run(Action.Open)'
+  default: 'First filter is all files (*) with translated Files label; Markdown (md/markdown/txt) is an optional second filter selected manually.'
+  verification: 'cargo fmt --check; git diff --check; cargo build --release --offline --locked. Native dialog selection not exercised in headless tests.'
+
+linux_window_backend:
+  implementation: 'src/main.rs: NativeOptions.event_loop_builder + Linux-only direct winit dependency (same locked 0.30.13 as eframe)'
+  policy: 'Prefer X11/XWayland if DISPLAY is nonempty; otherwise keep default native Wayland. No environment mutation; Windows unchanged.'
+  reason: 'winit 0.30.13 Wayland backend has no file-drop event implementation; App.ui alone cannot fix native drag/drop. Upstream https://github.com/rust-windowing/winit/issues/1881'
+  limitation: 'Wayland-only systems without XWayland still cannot receive file drops with this windowing version. Headless drop regression tests application handling, not compositor transport.'
+
+view_width:
+  implementation: 'src/app.rs: Config.view_width (0..3), VIEW_WIDTHS, view_geometry, Action.CycleWidth, View menu'
+  modes: 'Narrow/Medium/Wide/Full; Polish Wąski/Średni/Szeroki/Pełny. F2 cycles 0->1->2->3->0; translated in all 23 languages and listed in About.'
+  geometry: 'Linear interpolation between original 720px-max centered reading column and former optimize=false full layout, including left offset and line-number gutter; narrow windows use available width.'
+  persistence: 'view_width=0..3; default 0. Legacy optimize=1 maps to 0, optimize=0 maps to 3. Explicit new key takes precedence; invalid values keep current/default.'
+  code_font: 'Editor adds 1.5px to Look.size for detected syntax files before monospace scaling; Markdown prose and fenced blocks unchanged. Cache key includes resulting size.'
+  tests: [width_modes_cycle_persist_and_migrate_old_settings, settings_round_trip_and_reject_bad_values, about_lists_every_shortcut]
+release_0_1_7_validation:
+  checks: '76 passed, 3 manual benchmarks ignored; fmt, diff check, Clippy -D warnings; local Linux release; Docker Ubuntu 22.04 AppImage; MinGW Windows ZIP.'
+  artifacts: {appimage_bytes: 11655672, windows_zip_bytes: 9109720}
+  integrity: 'SHA-256 sidecars verified; ZIP CRC/content and EXE equality verified; ELF max GLIBC_2.35; PE imports contain system DLLs only, no external Oniguruma DLL.'
+  limitations: 'No Windows/Wine runtime test or interactive desktop drag/drop test for 0.1.7.'

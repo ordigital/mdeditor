@@ -1,0 +1,19 @@
+
+running 3 tests
+test app::tests::benchmark_editor_syntax_latency ... editor bytes=10044 cold_ms=4.874 cursor_p95_ms=0.049 cursor_p99_ms=0.108 edit_ms=0.571
+editor bytes=100006 cold_ms=10.230 cursor_p95_ms=0.085 cursor_p99_ms=0.357 edit_ms=4.093
+editor bytes=1000060 cold_ms=41.787 cursor_p95_ms=0.252 cursor_p99_ms=1.859 edit_ms=29.892
+ok
+test app::tests::benchmark_nested_editor_latency ... nested_editor bytes=10074 first_frame_ms=2.181 open_to_colors_ms=23.476 cursor_p95_ms=0.046 cursor_p99_ms=0.053 edit_first_frame_ms=0.362 edit_to_colors_ms=1.573
+nested_editor bytes=100050 first_frame_ms=2.412 open_to_colors_ms=89.609 cursor_p95_ms=0.057 cursor_p99_ms=0.087 edit_first_frame_ms=2.712 edit_to_colors_ms=4.813
+nested_editor bytes=1000086 first_frame_ms=5.692 open_to_colors_ms=759.794 cursor_p95_ms=0.294 cursor_p99_ms=0.396 edit_first_frame_ms=28.154 edit_to_colors_ms=53.899
+ok
+test highlight::engine::tests::benchmark_incremental_engine ... incremental php bytes=10074 cold_ms=15.308 edit_ms=1.259 parsed_lines=32
+incremental php bytes=100050 cold_ms=74.376 edit_ms=1.323 parsed_lines=32
+incremental php bytes=1000086 cold_ms=689.227 edit_ms=2.982 parsed_lines=32
+incremental php bytes=5000016 cold_ms=3513.416 edit_ms=17.216 parsed_lines=32
+ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 74 filtered out; finished in 5.46s
+
+peak_rss_kib=176680

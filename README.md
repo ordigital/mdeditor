@@ -16,13 +16,18 @@ Polish version: [README.pl.md](README.pl.md).
 - **Images**: from files, embedded as `data:` base64, `![[embeds]]`, `![alt|300](…)` widths.
   Ctrl+V with an image in the clipboard embeds it as a JPEG (85%, max 1200 px wide), or saves a WebP next to the document.
 - **Tabs, find / replace, undo / redo** (10 steps), recent files, a simple **file panel** (create, open, delete to trash).
+- A formatting toolbar below the tabs, including headings 1–6, normal text, inline styles, links, lists, tasks, quotes and images.
+- Ctrl+Shift+K creates a new Markdown file in the current document folder and links the selected text to it. Enter or Save confirms; existing files are never overwritten.
 - Formatting shortcuts that also toggle the selection (Ctrl+B, Ctrl+I, …), Ctrl+scroll zooms the font.
+- **View width**: Narrow, Medium, Wide and Full; F2 cycles between them. Narrow preserves the original reading column; Full uses the available editor width. Code files use a slightly larger font.
+- Drop files onto the window to open them in tabs. The Open dialog shows all files by default, with an optional Markdown filter. Linux prefers X11/XWayland when available because winit 0.30 cannot receive native Wayland file drops.
 - **Single instance**: running `mdedit file.md` again opens the file in a new tab of the running window.
 - Linux primary selection: select text, paste with the middle mouse button or Shift+Insert.
 - Defaults from Obsidian's dark theme: Inter (text) and Source Code Pro (code), both embedded;
   UI in the desktop font (KDE / GNOME settings, Noto Sans 10 as fallback).
-- Config files are shown as syntax-colored plain text, chosen by extension: XML, TOML, JSON, YAML, INI/CFG/CONF and `.env`.
-  Markdown files are not affected.
+- Config files are shown as syntax-colored plain text, chosen by extension: XML, TOML, JSON, YAML, INI/CFG/CONF and `.env`. Bash scripts (`.sh`, `.bash`) and shell startup files such as `.bashrc` and `.profile` also have syntax coloring.
+- **Code syntax highlighting** for HTML, CSS, PHP, Python, Rust, C, C++, Go and JavaScript, including HTML/CSS/JS embedded in PHP and supported fenced Markdown blocks. Grammar analysis runs in the background and reuses unchanged lines.
+  Very long code lines (over 256 KiB) fall back to plain text. See [architecture and measurements](docs/syntax-highlighting.md).
 - Binary and very large files (over 5 MB) are refused instead of freezing the editor.
 - Windows line endings (CRLF) are kept when saving. Ctrl+click opens only web and mail links, and never programs or scripts.
 
@@ -65,10 +70,12 @@ installs `mdedit.desktop` and the icon for the current user. On Wayland the task
 | Preferences / About | Ctrl+, / F1 |
 | Bold / Italic / Strikethrough | Ctrl+B / Ctrl+I / Ctrl+D |
 | Inline code / Highlight / Link | Ctrl+E / Ctrl+Shift+H / Ctrl+K |
+| Create a new linked page | Ctrl+Shift+K |
 | Heading 1–6 / normal text | Ctrl+1 … Ctrl+6 / Ctrl+0 |
 | Bullet list / Task / Quote | Ctrl+Shift+L / Ctrl+L / Ctrl+Shift+Q |
 | Open link or jump to footnote | Ctrl+click |
 | Change font size | Ctrl+scroll |
+| Cycle view width | F2 |
 | New list item / line within item | Enter / Shift+Enter |
 | Indent list item | Tab / Shift+Tab |
 
@@ -78,8 +85,8 @@ installs `mdedit.desktop` and the icon for the current user. On Wayland the task
 
 Edit → Preferences… (Ctrl+,): editor font, text / bold / code weight, text gamma, font size, line height,
 how pasted images are stored and the language. **Reset** restores the default font settings (Inter, weights
-300 / 600 / 400, gamma 0.80, 17 px, line height 1.65). View has toggles for the readable line length,
-line numbers, inline title and the file panel.
+300 / 600 / 400, gamma 0.80, 17 px, line height 1.65). View → View width offers Narrow, Medium, Wide and Full, plus toggles for
+line numbers, inline title and the file panel. Existing readable-width settings migrate automatically.
 
 Settings are stored in `~/.config/mdedit/config`, recent files in `~/.config/mdedit/recent`.
 
@@ -90,8 +97,9 @@ Settings are stored in `~/.config/mdedit/config`, recent files in `~/.config/mde
 | `src/main.rs` | entry point, single-instance socket, window icon |
 | `src/app.rs` | the application: menus, tabs, editor, dialogs, undo, settings |
 | `src/md.rs` | Markdown to styled text layout and decorations |
+| `src/markdown.rs` | shared Markdown prefix, indentation and block-boundary rules |
 | `src/latex.rs` | LaTeX math to Unicode |
-| `src/highlight.rs` | syntax coloring of config files |
+| `src/highlight.rs`, `src/highlight/` | language registry, shared spans/layout, configuration and Bash lexers, background incremental grammar engine |
 | `src/files.rs` | file panel |
 | `src/fonts.rs` | font loading (embedded Inter / Source Code Pro, system fonts via fontconfig) |
 | `src/base64.rs`, `src/i18n.rs` | base64 for embedded images, English / Polish strings |

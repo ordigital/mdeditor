@@ -161,3 +161,39 @@ pub fn open_warning(path: &Path) -> Option<&'static str> {
     };
     (!text || buf.contains(&0)).then_some("The file is not a text file")
 }
+
+/// A single filename, using the same portable rules in both file-creation dialogs.
+pub fn file_name(name: &str) -> Option<&str> {
+    let name = name.trim();
+    (!name.is_empty()
+        && !matches!(name, "." | "..")
+        && !name.chars().any(|c| c.is_control() || "/\\:*?\"<>|".contains(c))
+        && !name.ends_with('.'))
+    .then_some(name)
+}
+
+/// Never overwrite an existing file, including in the linked-page workflow.
+pub fn create_empty(path: &Path) -> Result<(), String> {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map(|_| ())
+        .map_err(|e| format!("{}: {e}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_names_are_portable_single_components() {
+        for name in ["", ".", "..", "../file", "..\\file", "C:\\file", "a/b", "bad?name", "a\0b", "trailing."] {
+            assert!(file_name(name).is_none(), "{name:?}");
+        }
+        for name in ["żółw.md", "new page", ".env", "file.MD"] {
+            assert_eq!(file_name(name), Some(name));
+        }
+        assert_eq!(file_name(" name "), Some("name"));
+    }
+}

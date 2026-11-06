@@ -221,7 +221,11 @@ Paste|Wklej
 Find/Replace|Znajdź/Zamień
 Insert image…|Wstaw obraz…
 View|Widok
-Optimize|Optymalizuj
+View width|Szerokość widoku
+Narrow|Wąski
+Medium|Średni
+Wide|Szeroki
+Full|Pełny
 Line numbers|Numery linii
 Inline title|Tytuł w treści
 Language|Język
@@ -292,6 +296,9 @@ Bullet list|Lista punktowana
 Task (checkbox)|Zadanie (checkbox)
 Quote|Cytat
 License|Licencja
+New linked page|Nowa strona z linkiem
+Invalid file name|Nieprawidłowa nazwa pliku
+Numbered list|Lista numerowana
 Code written with the help of|Kod napisany z pomocą
 Save the file first to paste images.|Najpierw zapisz plik, aby wklejać obrazy.
 Error|Błąd
@@ -311,7 +318,11 @@ Paste|Einfügen
 Find/Replace|Suchen/Ersetzen
 Insert image…|Bild einfügen…
 View|Ansicht
-Optimize|Optimieren
+View width|Ansichtsbreite
+Narrow|Schmal
+Medium|Mittel
+Wide|Breit
+Full|Voll
 Line numbers|Zeilennummern
 Inline title|Titel im Text
 Language|Sprache
@@ -382,6 +393,9 @@ Bullet list|Aufzählung
 Task (checkbox)|Aufgabe (Kontrollkästchen)
 Quote|Zitat
 License|Lizenz
+New linked page|Neue verlinkte Seite
+Invalid file name|Ungültiger Dateiname
+Numbered list|Nummerierte Liste
 Code written with the help of|Code geschrieben mit Hilfe von
 Save the file first to paste images.|Speichere die Datei zuerst, um Bilder einzufügen.
 Error|Fehler
@@ -401,7 +415,11 @@ Paste|Coller
 Find/Replace|Rechercher/remplacer
 Insert image…|Insérer une image…
 View|Affichage
-Optimize|Optimiser
+View width|Largeur de vue
+Narrow|Étroite
+Medium|Moyenne
+Wide|Large
+Full|Complète
 Line numbers|Numéros de ligne
 Inline title|Titre dans le texte
 Language|Langue
@@ -472,6 +490,9 @@ Bullet list|Liste à puces
 Task (checkbox)|Tâche (case à cocher)
 Quote|Citation
 License|Licence
+New linked page|Nouvelle page liée
+Invalid file name|Nom de fichier invalide
+Numbered list|Liste numérotée
 Code written with the help of|Code écrit avec l'aide de
 Save the file first to paste images.|Enregistrez d'abord le fichier pour coller des images.
 Error|Erreur
@@ -491,7 +512,11 @@ Paste|Вставить
 Find/Replace|Поиск/замена
 Insert image…|Вставить изображение…
 View|Вид
-Optimize|Оптимальная ширина
+View width|Ширина просмотра
+Narrow|Узкая
+Medium|Средняя
+Wide|Широкая
+Full|Полная
 Line numbers|Номера строк
 Inline title|Заголовок в тексте
 Language|Язык
@@ -562,6 +587,9 @@ Bullet list|Маркированный список
 Task (checkbox)|Задача (флажок)
 Quote|Цитата
 License|Лицензия
+New linked page|Новая связанная страница
+Invalid file name|Недопустимое имя файла
+Numbered list|Нумерованный список
 Code written with the help of|Код написан с помощью
 Save the file first to paste images.|Сначала сохраните файл, чтобы вставлять изображения.
 Error|Ошибка
@@ -581,7 +609,11 @@ Paste|Вставити
 Find/Replace|Пошук/заміна
 Insert image…|Вставити зображення…
 View|Вигляд
-Optimize|Оптимальна ширина
+View width|Ширина перегляду
+Narrow|Вузька
+Medium|Середня
+Wide|Широка
+Full|Повна
 Line numbers|Номери рядків
 Inline title|Заголовок у тексті
 Language|Мова
@@ -652,6 +684,9 @@ Bullet list|Маркований список
 Task (checkbox)|Завдання (прапорець)
 Quote|Цитата
 License|Ліцензія
+New linked page|Нова пов’язана сторінка
+Invalid file name|Неприпустима назва файлу
+Numbered list|Нумерований список
 Code written with the help of|Код написано за допомогою
 Save the file first to paste images.|Спочатку збережіть файл, щоб вставляти зображення.
 Error|Помилка
@@ -671,7 +706,11 @@ Paste|Vložit
 Find/Replace|Najít/nahradit
 Insert image…|Vložit obrázek…
 View|Zobrazení
-Optimize|Optimalizovat
+View width|Šířka zobrazení
+Narrow|Úzká
+Medium|Střední
+Wide|Široká
+Full|Plná
 Line numbers|Čísla řádků
 Inline title|Nadpis v textu
 Language|Jazyk
@@ -742,6 +781,9 @@ Bullet list|Odrážkový seznam
 Task (checkbox)|Úkol (zaškrtávací pole)
 Quote|Citace
 License|Licence
+New linked page|Nová odkazovaná stránka
+Invalid file name|Neplatný název souboru
+Numbered list|Číslovaný seznam
 Code written with the help of|Kód napsán s pomocí
 Save the file first to paste images.|Pro vložení obrázků nejprve soubor uložte.
 Error|Chyba
@@ -761,7 +803,11 @@ Paste|Vložiť
 Find/Replace|Hľadať/nahradiť
 Insert image…|Vložiť obrázok…
 View|Zobrazenie
-Optimize|Optimalizovať
+View width|Šírka zobrazenia
+Narrow|Úzka
+Medium|Stredná
+Wide|Široká
+Full|Plná
 Line numbers|Čísla riadkov
 Inline title|Nadpis v texte
 Language|Jazyk
@@ -832,6 +878,9 @@ Bullet list|Odrážkový zoznam
 Task (checkbox)|Úloha (začiarkavacie políčko)
 Quote|Citácia
 License|Licencia
+New linked page|Nová prepojená stránka
+Invalid file name|Neplatný názov súboru
+Numbered list|Číslovaný zoznam
 Code written with the help of|Kód napísaný s pomocou
 Save the file first to paste images.|Na vloženie obrázkov najprv uložte súbor.
 Error|Chyba
@@ -851,7 +900,11 @@ Paste|Pegar
 Find/Replace|Buscar/reemplazar
 Insert image…|Insertar imagen…
 View|Ver
-Optimize|Optimizar
+View width|Ancho de vista
+Narrow|Estrecho
+Medium|Medio
+Wide|Ancho
+Full|Completo
 Line numbers|Números de línea
 Inline title|Título en el texto
 Language|Idioma
@@ -922,6 +975,9 @@ Bullet list|Lista con viñetas
 Task (checkbox)|Tarea (casilla)
 Quote|Cita
 License|Licencia
+New linked page|Nueva página enlazada
+Invalid file name|Nombre de archivo no válido
+Numbered list|Lista numerada
 Code written with the help of|Código escrito con ayuda de
 Save the file first to paste images.|Guarda primero el archivo para pegar imágenes.
 Error|Error
@@ -941,7 +997,11 @@ Paste|Colar
 Find/Replace|Localizar/substituir
 Insert image…|Inserir imagem…
 View|Exibir
-Optimize|Otimizar
+View width|Largura da vista
+Narrow|Estreita
+Medium|Média
+Wide|Larga
+Full|Total
 Line numbers|Números de linha
 Inline title|Título no texto
 Language|Idioma
@@ -1012,6 +1072,9 @@ Bullet list|Lista com marcadores
 Task (checkbox)|Tarefa (caixa de seleção)
 Quote|Citação
 License|Licença
+New linked page|Nova página vinculada
+Invalid file name|Nome de arquivo inválido
+Numbered list|Lista numerada
 Code written with the help of|Código escrito com ajuda de
 Save the file first to paste images.|Salve o arquivo primeiro para colar imagens.
 Error|Erro
@@ -1031,7 +1094,11 @@ Paste|Incolla
 Find/Replace|Trova/sostituisci
 Insert image…|Inserisci immagine…
 View|Visualizza
-Optimize|Ottimizza
+View width|Larghezza vista
+Narrow|Stretta
+Medium|Media
+Wide|Ampia
+Full|Completa
 Line numbers|Numeri di riga
 Inline title|Titolo nel testo
 Language|Lingua
@@ -1102,6 +1169,9 @@ Bullet list|Elenco puntato
 Task (checkbox)|Attività (casella)
 Quote|Citazione
 License|Licenza
+New linked page|Nuova pagina collegata
+Invalid file name|Nome file non valido
+Numbered list|Elenco numerato
 Code written with the help of|Codice scritto con l'aiuto di
 Save the file first to paste images.|Salva prima il file per incollare immagini.
 Error|Errore
@@ -1121,7 +1191,11 @@ Paste|Beillesztés
 Find/Replace|Keresés/csere
 Insert image…|Kép beszúrása…
 View|Nézet
-Optimize|Optimalizálás
+View width|Nézet szélessége
+Narrow|Keskeny
+Medium|Közepes
+Wide|Széles
+Full|Teljes
 Line numbers|Sorszámok
 Inline title|Cím a szövegben
 Language|Nyelv
@@ -1192,6 +1266,9 @@ Bullet list|Felsorolás
 Task (checkbox)|Feladat (jelölőnégyzet)
 Quote|Idézet
 License|Licenc
+New linked page|Új hivatkozott oldal
+Invalid file name|Érvénytelen fájlnév
+Numbered list|Számozott lista
 Code written with the help of|A kódot segítségével írta:
 Save the file first to paste images.|A képek beillesztéséhez először mentse a fájlt.
 Error|Hiba
@@ -1211,7 +1288,11 @@ Paste|Yapıştır
 Find/Replace|Bul/değiştir
 Insert image…|Resim ekle…
 View|Görünüm
-Optimize|Optimize et
+View width|Görünüm genişliği
+Narrow|Dar
+Medium|Orta
+Wide|Geniş
+Full|Tam
 Line numbers|Satır numaraları
 Inline title|Metin içi başlık
 Language|Dil
@@ -1282,6 +1363,9 @@ Bullet list|Madde işaretli liste
 Task (checkbox)|Görev (onay kutusu)
 Quote|Alıntı
 License|Lisans
+New linked page|Yeni bağlantılı sayfa
+Invalid file name|Geçersiz dosya adı
+Numbered list|Numaralı liste
 Code written with the help of|Kod şunun yardımıyla yazıldı:
 Save the file first to paste images.|Resim yapıştırmak için önce dosyayı kaydedin.
 Error|Hata
@@ -1301,7 +1385,11 @@ Paste|Lipește
 Find/Replace|Caută/înlocuiește
 Insert image…|Inserează imagine…
 View|Vizualizare
-Optimize|Optimizează
+View width|Lățimea vizualizării
+Narrow|Îngustă
+Medium|Medie
+Wide|Lată
+Full|Completă
 Line numbers|Numere de rând
 Inline title|Titlu în text
 Language|Limbă
@@ -1372,6 +1460,9 @@ Bullet list|Listă cu marcatori
 Task (checkbox)|Sarcină (casetă de bifare)
 Quote|Citat
 License|Licență
+New linked page|Pagină nouă legată
+Invalid file name|Nume de fișier nevalid
+Numbered list|Listă numerotată
 Code written with the help of|Cod scris cu ajutorul
 Save the file first to paste images.|Salvează mai întâi fișierul pentru a lipi imagini.
 Error|Eroare
@@ -1391,7 +1482,11 @@ Paste|Επικόλληση
 Find/Replace|Εύρεση/αντικατάσταση
 Insert image…|Εισαγωγή εικόνας…
 View|Προβολή
-Optimize|Βελτιστοποίηση
+View width|Πλάτος προβολής
+Narrow|Στενό
+Medium|Μεσαίο
+Wide|Ευρύ
+Full|Πλήρες
 Line numbers|Αριθμοί γραμμών
 Inline title|Τίτλος στο κείμενο
 Language|Γλώσσα
@@ -1462,6 +1557,9 @@ Bullet list|Λίστα με κουκκίδες
 Task (checkbox)|Εργασία (πλαίσιο ελέγχου)
 Quote|Παράθεση
 License|Άδεια
+New linked page|Νέα συνδεδεμένη σελίδα
+Invalid file name|Μη έγκυρο όνομα αρχείου
+Numbered list|Αριθμημένη λίστα
 Code written with the help of|Ο κώδικας γράφτηκε με τη βοήθεια
 Save the file first to paste images.|Αποθηκεύστε πρώτα το αρχείο για να επικολλήσετε εικόνες.
 Error|Σφάλμα
@@ -1481,7 +1579,11 @@ Paste|Įklijuoti
 Find/Replace|Ieškoti/keisti
 Insert image…|Įterpti paveikslėlį…
 View|Rodinys
-Optimize|Optimizuoti
+View width|Rodinio plotis
+Narrow|Siauras
+Medium|Vidutinis
+Wide|Platus
+Full|Visas
 Line numbers|Eilučių numeriai
 Inline title|Pavadinimas tekste
 Language|Kalba
@@ -1552,6 +1654,9 @@ Bullet list|Ženklelių sąrašas
 Task (checkbox)|Užduotis (žymimasis langelis)
 Quote|Citata
 License|Licencija
+New linked page|Naujas susietas puslapis
+Invalid file name|Netinkamas failo vardas
+Numbered list|Numeruotas sąrašas
 Code written with the help of|Kodas parašytas su pagalba
 Save the file first to paste images.|Pirma įrašykite failą, kad galėtumėte įklijuoti paveikslėlius.
 Error|Klaida
@@ -1571,7 +1676,11 @@ Paste|貼り付け
 Find/Replace|検索/置換
 Insert image…|画像を挿入…
 View|表示
-Optimize|読みやすい幅
+View width|表示幅
+Narrow|狭い
+Medium|中間
+Wide|広い
+Full|全幅
 Line numbers|行番号
 Inline title|本文内タイトル
 Language|言語
@@ -1642,6 +1751,9 @@ Bullet list|箇条書き
 Task (checkbox)|タスク（チェックボックス）
 Quote|引用
 License|ライセンス
+New linked page|リンク先の新規ページ
+Invalid file name|無効なファイル名
+Numbered list|番号付きリスト
 Code written with the help of|コードの作成支援:
 Save the file first to paste images.|画像を貼り付けるには先にファイルを保存してください。
 Error|エラー
@@ -1661,7 +1773,11 @@ Paste|粘贴
 Find/Replace|查找/替换
 Insert image…|插入图片…
 View|视图
-Optimize|优化阅读宽度
+View width|视图宽度
+Narrow|窄
+Medium|中
+Wide|宽
+Full|全宽
 Line numbers|行号
 Inline title|页内标题
 Language|语言
@@ -1732,6 +1848,9 @@ Bullet list|无序列表
 Task (checkbox)|任务（复选框）
 Quote|引用
 License|许可证
+New linked page|新建链接页面
+Invalid file name|无效的文件名
+Numbered list|有序列表
 Code written with the help of|代码编写协助：
 Save the file first to paste images.|请先保存文件，然后再粘贴图片。
 Error|错误
@@ -1751,7 +1870,11 @@ Paste|הדבקה
 Find/Replace|חיפוש/החלפה
 Insert image…|הוספת תמונה…
 View|תצוגה
-Optimize|התאמה לקריאה
+View width|רוחב תצוגה
+Narrow|צר
+Medium|בינוני
+Wide|רחב
+Full|מלא
 Line numbers|מספרי שורות
 Inline title|כותרת בתוך הטקסט
 Language|שפה
@@ -1822,6 +1945,9 @@ Bullet list|רשימת נקודות
 Task (checkbox)|משימה (תיבת סימון)
 Quote|ציטוט
 License|רישיון
+New linked page|עמוד מקושר חדש
+Invalid file name|שם קובץ לא תקין
+Numbered list|רשימה ממוספרת
 Code written with the help of|קוד שנכתב בעזרת
 Save the file first to paste images.|שמור את הקובץ קודם כדי להדביק תמונות.
 Error|שגיאה
@@ -1841,7 +1967,11 @@ Paste|चिपकाएँ
 Find/Replace|खोजें/बदलें
 Insert image…|चित्र डालें…
 View|दृश्य
-Optimize|अनुकूलित करें
+View width|दृश्य की चौड़ाई
+Narrow|संकीर्ण
+Medium|मध्यम
+Wide|चौड़ा
+Full|पूर्ण
 Line numbers|पंक्ति संख्याएँ
 Inline title|पाठ में शीर्षक
 Language|भाषा
@@ -1912,6 +2042,9 @@ Bullet list|बुलेट सूची
 Task (checkbox)|कार्य (चेकबॉक्स)
 Quote|उद्धरण
 License|लाइसेंस
+New linked page|नया लिंक किया गया पृष्ठ
+Invalid file name|अमान्य फ़ाइल नाम
+Numbered list|क्रमांकित सूची
 Code written with the help of|कोड इनकी सहायता से लिखा गया
 Save the file first to paste images.|चित्र चिपकाने से पहले फ़ाइल सहेजें।
 Error|त्रुटि
@@ -1931,7 +2064,11 @@ Paste|পেস্ট
 Find/Replace|খুঁজুন/প্রতিস্থাপন
 Insert image…|ছবি সন্নিবেশ করুন…
 View|দেখুন
-Optimize|সর্বোত্তম প্রস্থ
+View width|দৃশ্যের প্রস্থ
+Narrow|সরু
+Medium|মাঝারি
+Wide|প্রশস্ত
+Full|পূর্ণ
 Line numbers|লাইন নম্বর
 Inline title|লেখার ভেতরে শিরোনাম
 Language|ভাষা
@@ -2002,6 +2139,9 @@ Bullet list|বুলেট তালিকা
 Task (checkbox)|কাজ (চেকবক্স)
 Quote|উদ্ধৃতি
 License|লাইসেন্স
+New linked page|নতুন সংযুক্ত পৃষ্ঠা
+Invalid file name|অবৈধ ফাইলের নাম
+Numbered list|সংখ্যাযুক্ত তালিকা
 Code written with the help of|কোড লিখতে সহায়তা করেছে
 Save the file first to paste images.|ছবি পেস্ট করার আগে ফাইলটি সংরক্ষণ করুন।
 Error|ত্রুটি
@@ -2021,7 +2161,11 @@ Paste|لصق
 Find/Replace|بحث/استبدال
 Insert image…|إدراج صورة…
 View|عرض
-Optimize|تحسين
+View width|عرض العرض
+Narrow|ضيق
+Medium|متوسط
+Wide|واسع
+Full|كامل
 Line numbers|أرقام الأسطر
 Inline title|العنوان في النص
 Language|اللغة
@@ -2092,6 +2236,9 @@ Bullet list|قائمة نقطية
 Task (checkbox)|مهمة (مربع اختيار)
 Quote|اقتباس
 License|الترخيص
+New linked page|صفحة مرتبطة جديدة
+Invalid file name|اسم ملف غير صالح
+Numbered list|قائمة مرقمة
 Code written with the help of|الشيفرة مكتوبة بمساعدة
 Save the file first to paste images.|احفظ الملف أولًا لتتمكن من لصق الصور.
 Error|خطأ
@@ -2111,7 +2258,11 @@ Paste|چسپاں کریں
 Find/Replace|تلاش/تبدیل
 Insert image…|تصویر داخل کریں…
 View|منظر
-Optimize|بہتر بنائیں
+View width|منظر کی چوڑائی
+Narrow|تنگ
+Medium|درمیانہ
+Wide|کشادہ
+Full|مکمل
 Line numbers|لائن نمبر
 Inline title|متن میں عنوان
 Language|زبان
@@ -2182,6 +2333,9 @@ Bullet list|نقطوں والی فہرست
 Task (checkbox)|کام (چیک باکس)
 Quote|اقتباس
 License|لائسنس
+New linked page|نیا منسلک صفحہ
+Invalid file name|فائل کا نام غلط ہے
+Numbered list|نمبر والی فہرست
 Code written with the help of|کوڈ کی تحریر میں مدد
 Save the file first to paste images.|تصاویر چسپاں کرنے سے پہلے فائل محفوظ کریں۔
 Error|خرابی

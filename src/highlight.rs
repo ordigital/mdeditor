@@ -1,6 +1,8 @@
-//! Syntax coloring for plain-text configuration files, chosen by the file extension.
+//! Syntax coloring for configuration files and shell scripts, chosen by the filename.
 //! These files are shown as monospace text (no Markdown); colors come from the editor's palette.
 
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -12,6 +14,12 @@ use eframe::egui::{
 
 use crate::md::{self, Look};
 
+mod bash;
+mod engine;
+mod worker;
+
+pub use worker::{Analysis, Worker};
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Syntax {
     Xml,
@@ -20,27 +28,173 @@ pub enum Syntax {
     Yaml,
     Ini,
     Env,
+    Bash,
+    Html,
+    Css,
+    Php,
+    Python,
+    Rust,
+    C,
+    Cpp,
+    Go,
+    JavaScript,
 }
 
+struct Language {
+    syntax: Syntax,
+    extensions: &'static [&'static str],
+    filenames: &'static [&'static str],
+    aliases: &'static [&'static str],
+    engine: Option<&'static str>,
+}
+
+/// Detection, fenced aliases and grammar selection have one source of truth.
+const LANGUAGES: &[Language] = &[
+    Language { syntax: Syntax::Xml, extensions: &["xml"], filenames: &[], aliases: &["xml"], engine: None },
+    Language { syntax: Syntax::Toml, extensions: &["toml"], filenames: &[], aliases: &["toml"], engine: None },
+    Language {
+        syntax: Syntax::Json,
+        extensions: &["json", "jsonc"],
+        filenames: &[],
+        aliases: &["json", "jsonc"],
+        engine: None,
+    },
+    Language {
+        syntax: Syntax::Yaml,
+        extensions: &["yaml", "yml"],
+        filenames: &[],
+        aliases: &["yaml", "yml"],
+        engine: None,
+    },
+    Language {
+        syntax: Syntax::Ini,
+        extensions: &["ini", "cfg", "conf"],
+        filenames: &[],
+        aliases: &["ini", "cfg", "conf"],
+        engine: None,
+    },
+    Language {
+        syntax: Syntax::Env,
+        extensions: &["env"],
+        filenames: &[".env"],
+        aliases: &["env", "dotenv"],
+        engine: None,
+    },
+    Language {
+        syntax: Syntax::Bash,
+        extensions: &["sh", "bash"],
+        filenames: &[".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".bash_aliases", ".profile"],
+        aliases: &["sh", "bash", "shell"],
+        engine: None,
+    },
+    Language {
+        syntax: Syntax::Html,
+        extensions: &["html", "htm"],
+        filenames: &[],
+        aliases: &["html", "htm"],
+        engine: Some("html"),
+    },
+    Language { syntax: Syntax::Css, extensions: &["css"], filenames: &[], aliases: &["css"], engine: Some("css") },
+    Language {
+        syntax: Syntax::Php,
+        extensions: &["php", "phtml", "php3", "php4", "php5", "php7", "php8"],
+        filenames: &[],
+        aliases: &["php"],
+        engine: Some("php"),
+    },
+    Language {
+        syntax: Syntax::Python,
+        extensions: &["py", "pyw"],
+        filenames: &[],
+        aliases: &["python", "py"],
+        engine: Some("py"),
+    },
+    Language {
+        syntax: Syntax::Rust,
+        extensions: &["rs"],
+        filenames: &[],
+        aliases: &["rust", "rs"],
+        engine: Some("rs"),
+    },
+    Language { syntax: Syntax::C, extensions: &["c", "h"], filenames: &[], aliases: &["c"], engine: Some("c") },
+    Language {
+        syntax: Syntax::Cpp,
+        extensions: &["cpp", "cc", "cxx", "hpp", "hh", "hxx"],
+        filenames: &[],
+        aliases: &["cpp", "c++", "cxx"],
+        engine: Some("cpp"),
+    },
+    Language {
+        syntax: Syntax::Go,
+        extensions: &["go"],
+        filenames: &[],
+        aliases: &["go", "golang"],
+        engine: Some("go"),
+    },
+    Language {
+        syntax: Syntax::JavaScript,
+        extensions: &["js", "mjs", "cjs"],
+        filenames: &[],
+        aliases: &["javascript", "js"],
+        engine: Some("js"),
+    },
+];
+
 impl Syntax {
-    pub fn from_path(path: &Path) -> Option<Syntax> {
-        let name = path.file_name()?.to_string_lossy().to_lowercase();
-        if name == ".env" || name.starts_with(".env.") {
-            return Some(Syntax::Env);
+    fn language(self) -> &'static Language {
+        LANGUAGES.iter().find(|l| l.syntax == self).expect("registered language")
+    }
+
+    pub fn from_path(path: &Path) -> Option<Self> {
+        let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
+        if name.starts_with(".env.") {
+            return Some(Self::Env);
         }
-        Some(match path.extension()?.to_string_lossy().to_lowercase().as_str() {
-            "xml" => Syntax::Xml,
-            "toml" => Syntax::Toml,
-            "json" | "jsonc" => Syntax::Json,
-            "yaml" | "yml" => Syntax::Yaml,
-            "ini" | "cfg" | "conf" => Syntax::Ini,
-            "env" => Syntax::Env,
-            _ => return None,
-        })
+        if let Some(language) = LANGUAGES.iter().find(|l| l.filenames.contains(&name.as_str())) {
+            return Some(language.syntax);
+        }
+        let extension = path.extension()?.to_string_lossy().to_ascii_lowercase();
+        LANGUAGES.iter().find(|l| l.extensions.contains(&extension.as_str())).map(|l| l.syntax)
+    }
+
+    pub fn from_alias(alias: &str) -> Option<Self> {
+        let alias = alias.to_ascii_lowercase();
+        LANGUAGES.iter().find(|l| l.aliases.contains(&alias.as_str())).map(|l| l.syntax)
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
+/// UTF-8 byte range and palette color; independent of fonts, wrapping and cursor position.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Span {
+    pub range: std::ops::Range<usize>,
+    pub color: Color32,
+}
+
+fn push_span(spans: &mut Vec<Span>, range: std::ops::Range<usize>, color: Color32) {
+    if range.is_empty() {
+        return;
+    }
+    if let Some(last) = spans.last_mut().filter(|last| last.range.end == range.start && last.color == color) {
+        last.range.end = range.end;
+    } else {
+        spans.push(Span { range, color });
+    }
+}
+
+fn native_spans(text: &str, syntax: Syntax) -> Vec<Span> {
+    let classes = classify(text, syntax);
+    let mut spans = Vec::new();
+    let mut start = 0;
+    for end in 1..=text.len() {
+        if end == text.len() || (text.is_char_boundary(end) && classes[end] != classes[start]) {
+            push_span(&mut spans, start..end, color(classes[start]));
+            start = end;
+        }
+    }
+    spans
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 enum Class {
     #[default]
     Text,
@@ -469,14 +623,16 @@ fn classify(text: &str, syntax: Syntax) -> Vec<Class> {
         Syntax::Ini => ini(text, &mut cls),
         Syntax::Env => env(text, &mut cls),
         Syntax::Xml => xml(text, &mut cls),
+        Syntax::Bash => bash::classify(text, &mut cls),
+        _ => {} // New languages are handled by the shared grammar engine.
     }
     cls
 }
 
-fn format(class: Class, look: &Look) -> TextFormat {
+fn format_color(color: Color32, look: &Look) -> TextFormat {
     TextFormat {
         font_id: FontId::new((look.size * 0.875).round(), FontFamily::Monospace),
-        color: color(class),
+        color,
         line_height: Some(look.size * look.line_height),
         valign: Align::Center,
         coords: VariationCoords::new([(b"wght", f32::from(look.code_weight))]),
@@ -484,25 +640,32 @@ fn format(class: Class, look: &Look) -> TextFormat {
     }
 }
 
-/// Runs of equal class in `text[from..to]` as sections; `base` is subtracted from the offsets.
-fn sections(text: &str, cls: &[Class], from: usize, to: usize, base: usize, look: &Look) -> Vec<LayoutSection> {
-    let mut out = Vec::new();
-    let mut run = from;
-    for i in from + 1..=to {
-        // Runs only change at character boundaries (egui slices the text there).
-        if i == to || (cls[i] != cls[run] && text.is_char_boundary(i)) {
-            out.push(LayoutSection {
+fn sections(text: &str, spans: &[Span], from: usize, to: usize, base: usize, look: &Look) -> Vec<LayoutSection> {
+    let mut output = Vec::new();
+    let mut offset = from;
+    let start = spans.partition_point(|s| s.range.end <= from);
+    let mut add = |a, b, color| {
+        if a < b && text.is_char_boundary(a) && text.is_char_boundary(b) {
+            output.push(LayoutSection {
                 leading_space: 0.0,
-                byte_range: ByteIndex(run - base)..ByteIndex(i - base),
-                format: format(cls[run], look),
+                byte_range: ByteIndex(a - base)..ByteIndex(b - base),
+                format: format_color(color, look),
             });
-            run = i;
         }
+    };
+    for span in spans[start..].iter().take_while(|s| s.range.start < to) {
+        let a = span.range.start.max(from);
+        let b = span.range.end.min(to);
+        add(offset, a, md::TEXT);
+        add(a, b, span.color);
+        offset = b;
     }
-    out
+    add(offset, to, md::TEXT);
+    output
 }
 
 /// Lays out `text` as colored monospace lines (one galley per line, like the Markdown layout).
+#[cfg(test)]
 pub fn build(
     text: &str,
     syntax: Syntax,
@@ -511,27 +674,84 @@ pub fn build(
     pixels_per_point: f32,
     layout: &mut dyn FnMut(LayoutJob) -> Arc<Galley>,
 ) -> Arc<Galley> {
-    let cls = classify(text, syntax);
+    let spans = native_spans(text, syntax);
+    build_spans(text, &spans, wrap, look, pixels_per_point, layout, &mut LayoutCache::default())
+}
+
+/// Persistent line galleys survive egui's frame-local font cache eviction.
+#[derive(Default)]
+pub struct LayoutCache {
+    fonts: u64,
+    metrics: u64,
+    lines: HashMap<u64, Arc<Galley>>,
+}
+
+impl LayoutCache {
+    pub fn set_fonts(&mut self, fonts: u64) {
+        if self.fonts != fonts {
+            self.lines.clear();
+            self.fonts = fonts;
+        }
+    }
+}
+
+pub fn build_spans(
+    text: &str,
+    spans: &[Span],
+    wrap: f32,
+    look: &Look,
+    pixels_per_point: f32,
+    layout: &mut dyn FnMut(LayoutJob) -> Arc<Galley>,
+    cache: &mut LayoutCache,
+) -> Arc<Galley> {
+    let mut metrics = std::collections::hash_map::DefaultHasher::new();
+    (
+        wrap.to_bits(),
+        pixels_per_point.to_bits(),
+        look.size.to_bits(),
+        look.line_height.to_bits(),
+        look.weight,
+        look.bold_weight,
+        look.code_weight,
+    )
+        .hash(&mut metrics);
+    let metrics = metrics.finish();
+    if cache.metrics != metrics {
+        cache.lines.clear();
+        cache.metrics = metrics;
+    }
+    let mut next = HashMap::new();
     let mut job = LayoutJob { text: text.to_owned(), ..Default::default() };
     job.wrap.max_width = wrap;
     let mut galleys = Vec::new();
     for (start, end) in lines(text) {
         let raw_end = text[end..].find('\n').map_or(text.len(), |p| end + p + 1).max(end);
-        job.sections.extend(sections(text, &cls, start, raw_end, 0, look));
-        let mut para = LayoutJob { text: text[start..end].to_owned(), ..Default::default() };
-        para.wrap.max_width = wrap;
-        if end > start {
-            para.sections = sections(text, &cls, start, end, start, look);
-        } else {
-            // An empty line takes its height from a zero-length section.
-            para.sections.push(LayoutSection {
-                leading_space: 0.0,
-                byte_range: ByteIndex(0)..ByteIndex(0),
-                format: format(Class::Text, look),
-            });
+        job.sections.extend(sections(text, spans, start, raw_end, 0, look));
+        let sections = sections(text, spans, start, end, start, look);
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        text[start..end].hash(&mut hash);
+        for section in &sections {
+            (&section.byte_range, section.format.color).hash(&mut hash);
         }
-        galleys.push(layout(para));
+        let key = hash.finish();
+        let galley = if let Some(galley) = next.get(&key).or_else(|| cache.lines.get(&key)) {
+            Arc::clone(galley)
+        } else {
+            let mut para = LayoutJob { text: text[start..end].to_owned(), sections, ..Default::default() };
+            para.wrap.max_width = wrap;
+            if end == start {
+                para.sections.push(LayoutSection {
+                    leading_space: 0.0,
+                    byte_range: ByteIndex(0)..ByteIndex(0),
+                    format: format_color(md::TEXT, look),
+                });
+            }
+            layout(para)
+        };
+        next.insert(key, galley.clone());
+        galleys.push(galley);
     }
+    cache.lines = next;
     if galleys.is_empty() {
         return layout(job);
     }
@@ -558,6 +778,18 @@ mod tests {
         assert_eq!(s(".env"), Some(Syntax::Env));
         assert_eq!(s(".env.local"), Some(Syntax::Env));
         assert_eq!(s("prod.env"), Some(Syntax::Env));
+        for name in [
+            "script.sh",
+            "script.BASH",
+            ".bashrc",
+            ".bash_profile",
+            ".bash_login",
+            ".bash_logout",
+            ".bash_aliases",
+            ".profile",
+        ] {
+            assert_eq!(s(name), Some(Syntax::Bash), "{name}");
+        }
         assert_eq!(s("notes.md"), None);
         assert_eq!(s("README"), None);
     }
@@ -602,10 +834,98 @@ mod tests {
     }
 
     #[test]
+    fn bash_colors_control_flow_assignments_parameters_and_comments() {
+        let script = "#!/bin/bash\nexport NAME=world\nif [[ -n $NAME ]]; then\n  printf \"%s\\n\" \"${NAME:-guest}\" # comment\nfi\nCOUNT=42\necho word#literal\nHASH=#value\n";
+        for keyword in ["export", "if", "then", "printf", "fi", "echo"] {
+            assert_eq!(class_of(script, Syntax::Bash, keyword), Class::Keyword);
+        }
+        for parameter in ["$NAME", "${NAME:-guest}"] {
+            assert_eq!(class_of(script, Syntax::Bash, parameter), Class::Number);
+        }
+        assert_eq!(class_of(script, Syntax::Bash, "NAME="), Class::Key);
+        assert_eq!(class_of(script, Syntax::Bash, "42"), Class::Number);
+        assert_eq!(class_of(script, Syntax::Bash, "#!"), Class::Comment);
+        assert_eq!(class_of(script, Syntax::Bash, "# comment"), Class::Comment);
+        assert_eq!(class_of(script, Syntax::Bash, "#literal"), Class::Text);
+        assert_eq!(class_of(script, Syntax::Bash, "#value"), Class::Text);
+        assert_eq!(class_of(script, Syntax::Bash, ";"), Class::Punct);
+    }
+
+    #[test]
+    fn bash_respects_quotes_escapes_and_multiline_strings() {
+        let script = r#"echo '$literal # text' "$expanded \$escaped # string" $'it\'s literal'
+echo 'multi
+# still string'
+echo \#escaped foo\ #word
+"#;
+        for literal in ["$literal", "# text", "$escaped", "# string", "s literal", "# still string"] {
+            assert_eq!(class_of(script, Syntax::Bash, literal), Class::Str, "{literal}");
+        }
+        assert_eq!(class_of(script, Syntax::Bash, "$expanded"), Class::Number);
+        for literal in ["#escaped", "#word"] {
+            assert_eq!(class_of(script, Syntax::Bash, literal), Class::Text);
+        }
+        for parameter in ["$?", "$1", "$@", "$$", "${x:-${fallback}}"] {
+            let cls = classify(parameter, Syntax::Bash);
+            assert!(cls.iter().all(|c| *c == Class::Number), "{parameter}");
+        }
+    }
+
+    #[test]
+    fn bash_heredocs_obey_quoted_delimiters_and_tab_stripping() {
+        let script =
+            "cat <<FIRST <<-'SECOND'\nhello $expanded # body\nFIRST\n\t$literal # body\n\tSECOND\nprintf done\n";
+        assert_eq!(class_of(script, Syntax::Bash, "$expanded"), Class::Number);
+        for literal in ["hello", "# body", "$literal"] {
+            assert_eq!(class_of(script, Syntax::Bash, literal), Class::Str);
+        }
+        assert_eq!(class_of(script, Syntax::Bash, "printf"), Class::Keyword);
+        assert_eq!(class_of(script, Syntax::Bash, "done"), Class::Keyword);
+        let escaped = "cat <<\\EOF\n$plain\nEOF\necho ok";
+        assert_eq!(class_of(escaped, Syntax::Bash, "$plain"), Class::Str);
+        assert_eq!(class_of(escaped, Syntax::Bash, "echo"), Class::Keyword);
+    }
+
+    #[test]
+    fn bash_shifts_and_here_strings_do_not_start_heredocs() {
+        let script = "echo $((1 << 2))\nread <<<value\nprintf \"$after\"";
+        assert_eq!(class_of(script, Syntax::Bash, "2"), Class::Number);
+        assert_eq!(class_of(script, Syntax::Bash, "value"), Class::Text);
+        assert_eq!(class_of(script, Syntax::Bash, "printf"), Class::Keyword);
+        assert_eq!(class_of(script, Syntax::Bash, "$after"), Class::Number);
+    }
+
+    #[test]
+    fn line_layout_cache_reuses_unchanged_lines_and_invalidates_fonts_and_wrap() {
+        let ctx = eframe::egui::Context::default();
+        crate::fonts::apply(&ctx, "", 300, 600, crate::i18n::Lang::English);
+        ctx.run_ui(eframe::egui::RawInput::default(), |_| {}).textures_delta.clear();
+        let look = Look { size: 16.0, line_height: 1.5, weight: 300, bold_weight: 600, code_weight: 400 };
+        let calls = std::cell::Cell::new(0);
+        let mut layout = |job| {
+            calls.set(calls.get() + 1);
+            ctx.fonts_mut(|f| f.layout_job(job))
+        };
+        let mut cache = LayoutCache::default();
+        build_spans("one\ntwo", &[], 300.0, &look, 1.0, &mut layout, &mut cache);
+        assert_eq!(calls.get(), 2);
+        build_spans("one\ntwo", &[], 300.0, &look, 1.0, &mut layout, &mut cache);
+        assert_eq!(calls.get(), 2);
+        build_spans("one\nchanged", &[], 300.0, &look, 1.0, &mut layout, &mut cache);
+        assert_eq!(calls.get(), 3);
+        build_spans("one\nchanged", &[], 200.0, &look, 1.0, &mut layout, &mut cache);
+        assert_eq!(calls.get(), 5);
+        cache.set_fonts(1);
+        build_spans("one\nchanged", &[], 200.0, &look, 1.0, &mut layout, &mut cache);
+        assert_eq!(calls.get(), 7);
+    }
+
+    #[test]
     fn random_text_does_not_panic_and_lays_out() {
         const TOKENS: &[&str] = &[
             "\"", "'", "\"\"\"", "[", "]", "{", "}", ":", "=", "#", ";", "<", ">", "</", "/>", "<!--", "-->", "<?",
             "?>", "&", "${", "$", "-", "- ", "\\", "ą", "日本", "🙂", "\n", "\n", " ", "key", "12", "true", "export ",
+            "<<", "<<<", "((", "))", "$?", "${x:-", "EOF", "fi", "echo",
         ];
         let ctx = eframe::egui::Context::default();
         crate::fonts::apply(&ctx, "", 300, 600, crate::i18n::Lang::English);
@@ -621,7 +941,9 @@ mod tests {
                 seed ^= seed << 17;
                 text += TOKENS[(seed as usize) % TOKENS.len()];
             }
-            for syntax in [Syntax::Xml, Syntax::Toml, Syntax::Json, Syntax::Yaml, Syntax::Ini, Syntax::Env] {
+            for syntax in
+                [Syntax::Xml, Syntax::Toml, Syntax::Json, Syntax::Yaml, Syntax::Ini, Syntax::Env, Syntax::Bash]
+            {
                 let _ = build(&text, syntax, 300.0, &look, 1.0, &mut layout);
             }
         }
