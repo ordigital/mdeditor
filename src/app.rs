@@ -208,6 +208,13 @@ struct Cache {
     decos: Vec<Deco>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum SyntaxMode {
+    Automatic,
+    Markdown,
+    Language(Syntax),
+}
+
 struct Doc {
     id: u64,
     path: Option<PathBuf>,
@@ -221,8 +228,9 @@ struct Doc {
     undo: Vec<String>,
     redo: Vec<String>,
     last_edit: f64,
-    /// Config files and shell scripts are shown as colored plain text instead of Markdown.
+    /// Effective syntax, refreshed only when the filename or tab-local mode changes.
     syntax: Option<Syntax>,
+    syntax_mode: SyntaxMode,
     /// The file used Windows line endings; they are restored when saving (the text is kept as `\n`).
     crlf: bool,
     /// (characters, words), recomputed only after the text changed.
@@ -234,6 +242,7 @@ impl Doc {
         Self {
             id,
             syntax: path.as_deref().and_then(Syntax::from_path),
+            syntax_mode: SyntaxMode::Automatic,
             path,
             saved: text.clone(),
             prev: text.clone(),
@@ -247,6 +256,16 @@ impl Doc {
             crlf: false,
             stats: Default::default(),
         }
+    }
+
+    /// Selecting a view never edits the buffer, filename or undo history.
+    fn set_syntax(&mut self, mode: SyntaxMode) {
+        self.syntax_mode = mode;
+        self.syntax = match mode {
+            SyntaxMode::Automatic => self.path.as_deref().and_then(Syntax::from_path),
+            SyntaxMode::Markdown => None,
+            SyntaxMode::Language(syntax) => Some(syntax),
+        };
     }
 
     /// (characters, words) of the text.
@@ -939,8 +958,8 @@ impl App {
             if p.extension().is_none() {
                 p.set_extension("md");
             }
-            doc.syntax = Syntax::from_path(&p);
             doc.path = Some(p.clone());
+            doc.set_syntax(doc.syntax_mode);
             self.add_recent(&p);
         }
         let doc = &mut self.docs[i];
@@ -1674,6 +1693,26 @@ impl App {
                 ui.checkbox(&mut self.cfg.line_numbers, t("Line numbers"));
                 ui.checkbox(&mut self.cfg.inline_title, t("Inline title"));
                 ui.checkbox(&mut self.cfg.files, t("Files")).on_hover_text(label(Action::Files));
+            });
+            ui.add_enabled_ui(!self.has_modal() && !self.docs.is_empty(), |ui| {
+                ui.menu_button(t("Syntax"), |ui| {
+                    let Some(doc) = self.docs.get_mut(self.active) else { return };
+                    let mut mode = doc.syntax_mode;
+                    let mut option = |ui: &mut Ui, value, name: &str| {
+                        if ui.selectable_value(&mut mode, value, name).clicked() {
+                            ui.close();
+                        }
+                    };
+                    option(ui, SyntaxMode::Automatic, t("Automatic"));
+                    ui.separator();
+                    option(ui, SyntaxMode::Markdown, "Markdown");
+                    for syntax in Syntax::available() {
+                        option(ui, SyntaxMode::Language(syntax), syntax.name());
+                    }
+                    if mode != doc.syntax_mode {
+                        doc.set_syntax(mode);
+                    }
+                });
             });
             if ui.button(t("About")).on_hover_text("F1").clicked() {
                 acts.push(Action::About);
@@ -3112,6 +3151,56 @@ mod tests {
                 start.elapsed().as_secs_f64() * 1000.0
             );
         }
+    }
+
+    #[test]
+    fn manual_syntax_is_tab_local_and_preserves_text_history_and_save() {
+        let text = "// comment\nfn main() {}";
+        let (mut app, ctx) = app_with(text);
+        frame(&mut app, &ctx, vec![]);
+        let original = app.docs[0].text.clone();
+        let undo = app.docs[0].undo.clone();
+        let dirty = app.docs[0].dirty();
+        app.docs[0].set_syntax(SyntaxMode::Language(Syntax::Rust));
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            frame(&mut app, &ctx, vec![]);
+            if app.docs[0].analysis.spans().iter().any(|s| s.range.contains(&3) && s.color == md::DIM) {
+                break;
+            }
+            assert!(std::time::Instant::now() < deadline, "manual Rust coloring did not arrive");
+        }
+        let revision = app.docs[0].analysis.revision();
+        app.docs[0].set_syntax(SyntaxMode::Markdown);
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.docs[0].analysis.revision() > revision);
+        assert!(app.docs[0].analysis.spans().is_empty());
+        assert_eq!(app.docs[0].syntax, None);
+        assert_eq!(app.docs[0].text, original);
+        assert_eq!(app.docs[0].undo, undo);
+        assert_eq!(app.docs[0].dirty(), dirty);
+
+        let path = std::env::temp_dir().join(format!("mdedit-manual-syntax-{}.html", std::process::id()));
+        app.docs[0].path = Some(path.clone());
+        app.docs[0].set_syntax(SyntaxMode::Language(Syntax::Bash));
+        assert!(app.save(0, false));
+        assert_eq!(app.docs[0].syntax, Some(Syntax::Bash));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), original);
+        app.new_doc();
+        assert_eq!(app.docs[1].syntax_mode, SyntaxMode::Automatic);
+        assert_eq!(app.docs[1].syntax, None);
+        assert_eq!(app.docs[0].syntax, Some(Syntax::Bash));
+        app.docs[0].set_syntax(SyntaxMode::Automatic);
+        assert_eq!(app.docs[0].syntax, Some(Syntax::Html));
+        // The same refresh is used after Save As; explicit Markdown survives a new extension.
+        app.docs[0].set_syntax(SyntaxMode::Markdown);
+        app.docs[0].path = Some(path.with_extension("rs"));
+        let mode = app.docs[0].syntax_mode;
+        app.docs[0].set_syntax(mode);
+        assert_eq!(app.docs[0].syntax, None);
+        app.docs[0].set_syntax(SyntaxMode::Automatic);
+        assert_eq!(app.docs[0].syntax, Some(Syntax::Rust));
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

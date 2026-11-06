@@ -26,6 +26,7 @@ Polish version: [README.pl.md](README.pl.md).
 - Defaults from Obsidian's dark theme: Inter (text) and Source Code Pro (code), both embedded;
   UI in the desktop font (KDE / GNOME settings, Noto Sans 10 as fallback).
 - Config files are shown as syntax-colored plain text, chosen by extension: XML, TOML, JSON, YAML, INI/CFG/CONF and `.env`. Bash scripts (`.sh`, `.bash`) and shell startup files such as `.bashrc` and `.profile` also have syntax coloring.
+- **Syntax menu**: choose Automatic, Markdown or any supported code/config language for the current tab. A manual choice survives saving and Save As until you select Automatic or close the tab; it does not change the filename or contents.
 - **Code syntax highlighting** for HTML, CSS, PHP, Python, Rust, C, C++, Go and JavaScript, including HTML/CSS/JS embedded in PHP and supported fenced Markdown blocks. Grammar analysis runs in the background and reuses unchanged lines.
   Very long code lines (over 256 KiB) fall back to plain text. See [architecture and measurements](docs/syntax-highlighting.md).
 - Binary and very large files (over 5 MB) are refused instead of freezing the editor.

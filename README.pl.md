@@ -6,6 +6,8 @@ Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyc
 
 ## Funkcje
 
+- Menu **Składnia**: Automatycznie, Markdown lub dowolny obsługiwany język kodu/konfiguracji dla bieżącej zakładki. Ręczny wybór pozostaje aktywny po zapisie i „Zapisz jako”, do przywrócenia automatycznego wykrywania lub zamknięcia zakładki. Nie zmienia nazwy ani zawartości pliku.
+
 - Cztery szerokości widoku: **Wąski, Średni, Szeroki, Pełny**, przełączane przez **F2**. Nieco większa czcionka w plikach kodu.
 - Przeciąganie plików na okno otwiera je w zakładkach. Okno otwierania domyślnie pokazuje wszystkie pliki; filtr Markdown można wybrać ręcznie. Na Linuksie aplikacja preferuje X11/XWayland, gdy jest dostępny — winit 0.30 nie odbiera upuszczanych plików w natywnym Waylandzie.
 

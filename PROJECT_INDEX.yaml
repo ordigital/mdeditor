@@ -1,4 +1,7 @@
 schema: 1
+maintenance:
+  mandatory: 'Always update PROJECT_INDEX.yaml in the same change as project work, before committing or releasing. This applies to every agent and every task, including bug fixes, features, architecture, documentation, verification and releases.'
+  scope: 'Keep navigation, behavior/invariants, tests, build/release commands, current version and material limitations accurate. Preserve historical release validation records; never record credentials. Read this index first when starting without context.'
 project: {name: MDEdit, language: Rust, edition: 2024, rust: '1.95', ui: 'eframe/egui 0.36'}
 entry: src/main.rs
 navigation:
@@ -58,7 +61,7 @@ list_editing:
     - inserting_and_deleting_numbered_items_updates_following_numbers
     - empty_bullet_height_and_continuation_indent_are_stable
   test_harness: 'egui headless run_ui outputs must clear textures_delta; texture tests declare max_texture_side'
-last_verification: {tests: 76, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
+last_verification: {tests: 78, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
 deployment:
   desktop_launcher: /home/adam/.local/share/applications/mdedit.desktop
   executable: target/release/mdedit
@@ -72,20 +75,20 @@ review_fixes:
   replacement: 'replace_one uses insert; replace_all uses App.checkpoint so normalization and replacement share undo history'
   tests: [replacement_keeps_numbering_and_undo_together, shift_tab_reverses_one_rendered_indentation_level]
 release_workflow:
-  current_version: 0.1.7
+  current_version: 0.1.8
   repository: ordigital/mdeditor
   branch: master
-  tag: v0.1.7
-  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.7
+  tag: v0.1.8
+  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.8
   instructions: packaging/RELEASING.md
-  notes: packaging/release-notes-0.1.7.md
-  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.7-x86_64.AppImage}
-  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.7-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE]}
+  notes: packaging/release-notes-0.1.8.md
+  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.8-x86_64.AppImage}
+  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.8-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE]}
   checksums: 'Both packages have basename.sha256 sidecars with relative filenames; verify from releases/.'
   publication: 'Annotated v<version> tag; atomic push of master and tag; gh release create --verify-tag --notes-file with two packages and two SHA-256 files.'
   caches: [releases/build/target, 'Docker volume mdedit-cargo', 'Docker volume mdedit-rustup']
   requirements: 'Docker daemon running and socket accessible, appimagetool, MinGW-w64, Rust Windows GNU target, Python >=3.11, gh authentication, GitHub SSH access.'
-  validation: '76 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.7.'
+  validation: '78 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.8.'
   git_policy: 'releases/ is ignored; commit source/index/scripts/notes and version bump, upload binaries as GitHub release assets; never force-push existing tags.'
 linked_pages_and_toolbar:
   status: 'Included in release v0.1.7.'
@@ -144,8 +147,8 @@ grammar_highlighting:
   offsets: 'Span ranges are UTF-8 bytes. Provisional colors are remapped only over unchanged prefix/suffix text; new/replaced bytes stay plain until the worker corrects lexical context.'
   limits: 'Code file/block with a line >262144 bytes falls back to plain text. Regex calls are not preempted internally. Whole-document TextEdit layout still costs about 28 ms for a 1 MB edit in the measured fixture.'
   performance: 'Measured on i9-13900KF, release/headless egui: 1 MB code cursor p95 about 0.25-0.29 ms, previously 28-30 ms/frame; 100 KB nested PHP edit first frame 2.7 ms and colors 4.8 ms. See report for cold costs, RSS, fixtures and caveats.'
-  binaries: 'Local release: Linux 27806528 bytes, Windows 20505088 bytes; Oniguruma linked statically (no extra runtime DLL/shared library).'
-  verification: '76 regular tests plus 3 ignored manual release benchmarks; fmt; Clippy -D warnings; Linux + MinGW Windows release builds. Windows runtime not tested.'
+  binaries: 'Local release: Linux 27844800 bytes, Windows 20527104 bytes; Oniguruma linked statically (no extra runtime DLL/shared library).'
+  verification: '78 regular tests plus 3 ignored manual release benchmarks; fmt; Clippy -D warnings; Linux + MinGW Windows release builds. Windows runtime not tested.'
   commands: ['cargo test --release --offline --locked benchmark_ -- --ignored --nocapture --test-threads=1', 'cargo run --release --offline --locked --manifest-path tools/syntax-probe/Cargo.toml', 'cargo run --release --offline --locked --no-default-features --features onig --manifest-path tools/syntax-probe/Cargo.toml', 'cargo build --release --offline --locked --target x86_64-pc-windows-gnu']
 
 file_drop:
@@ -177,3 +180,18 @@ release_0_1_7_validation:
   artifacts: {appimage_bytes: 11655672, windows_zip_bytes: 9109720}
   integrity: 'SHA-256 sidecars verified; ZIP CRC/content and EXE equality verified; ELF max GLIBC_2.35; PE imports contain system DLLs only, no external Oniguruma DLL.'
   limitations: 'No Windows/Wine runtime test or interactive desktop drag/drop test for 0.1.7.'
+
+manual_syntax:
+  implementation: 'src/app.rs: SyntaxMode, Doc.set_syntax, App.menu_bar Syntax menu; src/highlight.rs: Language.name, Syntax.available/name'
+  state: 'Per-tab SyntaxMode Automatic/Markdown/Language(Syntax), defaults Automatic. Doc.syntax is the derived effective syntax; set_syntax refreshes it whenever mode/path changes. Save As preserves mode and refreshes after replacing path.'
+  menu: 'Automatic, explicit Markdown, then all 16 existing registry languages. Disabled with no document or while a modal is open. Translated Syntax/Automatic in all 23 UI languages; language names are canonical.'
+  registry: 'LANGUAGES owns canonical display names along with detection/aliases/engine keys. Add a registered language once to include it in the menu; do not maintain another UI language list.'
+  behavior: 'Switching modes does not change text, path, dirty flag or undo history. Existing syntax revision checks refresh/cache colors and reject obsolete async results; effective syntax gates Markdown tools and editing rules.'
+  persistence: 'Runtime tab preference only; kept across saving and switching tabs, reset on close/reopen. No global config, on-disk file metadata or new dependencies.'
+  tests: [manual_syntax_is_tab_local_and_preserves_text_history_and_save, syntax_menu_uses_unique_named_registry_entries]
+  review: 'DRY: registry reused for labels/options. KISS: one tab mode and existing analysis pipeline. YAGNI: no extra grammar, parser, persistence layer or generic menu framework.'
+
+release_0_1_8_validation:
+  checks: '78 passed, 3 ignored manual benchmarks; fmt, diff check, Clippy -D warnings; local release build; Docker Ubuntu 22.04 AppImage; MinGW Windows ZIP.'
+  integrity: 'SHA-256 sidecars verified; ZIP CRC/content and EXE equality verified; ELF max GLIBC_2.35; PE imports checked, no external Oniguruma or MinGW C++ runtime DLL.'
+  limitations: 'No interactive desktop or Windows/Wine runtime tests.'

@@ -41,6 +41,7 @@ pub enum Syntax {
 }
 
 struct Language {
+    name: &'static str,
     syntax: Syntax,
     extensions: &'static [&'static str],
     filenames: &'static [&'static str],
@@ -50,9 +51,24 @@ struct Language {
 
 /// Detection, fenced aliases and grammar selection have one source of truth.
 const LANGUAGES: &[Language] = &[
-    Language { syntax: Syntax::Xml, extensions: &["xml"], filenames: &[], aliases: &["xml"], engine: None },
-    Language { syntax: Syntax::Toml, extensions: &["toml"], filenames: &[], aliases: &["toml"], engine: None },
     Language {
+        name: "XML",
+        syntax: Syntax::Xml,
+        extensions: &["xml"],
+        filenames: &[],
+        aliases: &["xml"],
+        engine: None,
+    },
+    Language {
+        name: "TOML",
+        syntax: Syntax::Toml,
+        extensions: &["toml"],
+        filenames: &[],
+        aliases: &["toml"],
+        engine: None,
+    },
+    Language {
+        name: "JSON",
         syntax: Syntax::Json,
         extensions: &["json", "jsonc"],
         filenames: &[],
@@ -60,6 +76,7 @@ const LANGUAGES: &[Language] = &[
         engine: None,
     },
     Language {
+        name: "YAML",
         syntax: Syntax::Yaml,
         extensions: &["yaml", "yml"],
         filenames: &[],
@@ -67,6 +84,7 @@ const LANGUAGES: &[Language] = &[
         engine: None,
     },
     Language {
+        name: "INI",
         syntax: Syntax::Ini,
         extensions: &["ini", "cfg", "conf"],
         filenames: &[],
@@ -74,6 +92,7 @@ const LANGUAGES: &[Language] = &[
         engine: None,
     },
     Language {
+        name: ".env",
         syntax: Syntax::Env,
         extensions: &["env"],
         filenames: &[".env"],
@@ -81,6 +100,7 @@ const LANGUAGES: &[Language] = &[
         engine: None,
     },
     Language {
+        name: "Bash",
         syntax: Syntax::Bash,
         extensions: &["sh", "bash"],
         filenames: &[".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".bash_aliases", ".profile"],
@@ -88,14 +108,23 @@ const LANGUAGES: &[Language] = &[
         engine: None,
     },
     Language {
+        name: "HTML",
         syntax: Syntax::Html,
         extensions: &["html", "htm"],
         filenames: &[],
         aliases: &["html", "htm"],
         engine: Some("html"),
     },
-    Language { syntax: Syntax::Css, extensions: &["css"], filenames: &[], aliases: &["css"], engine: Some("css") },
     Language {
+        name: "CSS",
+        syntax: Syntax::Css,
+        extensions: &["css"],
+        filenames: &[],
+        aliases: &["css"],
+        engine: Some("css"),
+    },
+    Language {
+        name: "PHP",
         syntax: Syntax::Php,
         extensions: &["php", "phtml", "php3", "php4", "php5", "php7", "php8"],
         filenames: &[],
@@ -103,6 +132,7 @@ const LANGUAGES: &[Language] = &[
         engine: Some("php"),
     },
     Language {
+        name: "Python",
         syntax: Syntax::Python,
         extensions: &["py", "pyw"],
         filenames: &[],
@@ -110,14 +140,23 @@ const LANGUAGES: &[Language] = &[
         engine: Some("py"),
     },
     Language {
+        name: "Rust",
         syntax: Syntax::Rust,
         extensions: &["rs"],
         filenames: &[],
         aliases: &["rust", "rs"],
         engine: Some("rs"),
     },
-    Language { syntax: Syntax::C, extensions: &["c", "h"], filenames: &[], aliases: &["c"], engine: Some("c") },
     Language {
+        name: "C",
+        syntax: Syntax::C,
+        extensions: &["c", "h"],
+        filenames: &[],
+        aliases: &["c"],
+        engine: Some("c"),
+    },
+    Language {
+        name: "C++",
         syntax: Syntax::Cpp,
         extensions: &["cpp", "cc", "cxx", "hpp", "hh", "hxx"],
         filenames: &[],
@@ -125,6 +164,7 @@ const LANGUAGES: &[Language] = &[
         engine: Some("cpp"),
     },
     Language {
+        name: "Go",
         syntax: Syntax::Go,
         extensions: &["go"],
         filenames: &[],
@@ -132,6 +172,7 @@ const LANGUAGES: &[Language] = &[
         engine: Some("go"),
     },
     Language {
+        name: "JavaScript",
         syntax: Syntax::JavaScript,
         extensions: &["js", "mjs", "cjs"],
         filenames: &[],
@@ -141,6 +182,15 @@ const LANGUAGES: &[Language] = &[
 ];
 
 impl Syntax {
+    /// The menu uses the same registry as filename and fenced-language detection.
+    pub fn available() -> impl Iterator<Item = Self> {
+        LANGUAGES.iter().map(|language| language.syntax)
+    }
+
+    pub fn name(self) -> &'static str {
+        self.language().name
+    }
+
     fn language(self) -> &'static Language {
         LANGUAGES.iter().find(|l| l.syntax == self).expect("registered language")
     }
@@ -765,6 +815,18 @@ mod tests {
     /// The class of the first occurrence of `needle` in `text`.
     fn class_of(text: &str, syntax: Syntax, needle: &str) -> Class {
         classify(text, syntax)[text.find(needle).unwrap()]
+    }
+
+    #[test]
+    fn syntax_menu_uses_unique_named_registry_entries() {
+        let syntaxes: Vec<_> = Syntax::available().collect();
+        let mut unique = std::collections::HashSet::new();
+        for syntax in syntaxes {
+            assert!(unique.insert(syntax));
+            assert!(!syntax.name().is_empty());
+            assert!(syntax.language().aliases.iter().any(|alias| Syntax::from_alias(alias) == Some(syntax)));
+        }
+        assert_eq!(unique.len(), LANGUAGES.len());
     }
 
     #[test]

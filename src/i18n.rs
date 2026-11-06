@@ -221,6 +221,8 @@ Paste|Wklej
 Find/Replace|Znajdź/Zamień
 Insert image…|Wstaw obraz…
 View|Widok
+Syntax|Składnia
+Automatic|Automatycznie
 View width|Szerokość widoku
 Narrow|Wąski
 Medium|Średni
@@ -318,6 +320,8 @@ Paste|Einfügen
 Find/Replace|Suchen/Ersetzen
 Insert image…|Bild einfügen…
 View|Ansicht
+Syntax|Syntax
+Automatic|Automatisch
 View width|Ansichtsbreite
 Narrow|Schmal
 Medium|Mittel
@@ -415,6 +419,8 @@ Paste|Coller
 Find/Replace|Rechercher/remplacer
 Insert image…|Insérer une image…
 View|Affichage
+Syntax|Syntaxe
+Automatic|Automatique
 View width|Largeur de vue
 Narrow|Étroite
 Medium|Moyenne
@@ -512,6 +518,8 @@ Paste|Вставить
 Find/Replace|Поиск/замена
 Insert image…|Вставить изображение…
 View|Вид
+Syntax|Синтаксис
+Automatic|Автоматически
 View width|Ширина просмотра
 Narrow|Узкая
 Medium|Средняя
@@ -609,6 +617,8 @@ Paste|Вставити
 Find/Replace|Пошук/заміна
 Insert image…|Вставити зображення…
 View|Вигляд
+Syntax|Синтаксис
+Automatic|Автоматично
 View width|Ширина перегляду
 Narrow|Вузька
 Medium|Середня
@@ -706,6 +716,8 @@ Paste|Vložit
 Find/Replace|Najít/nahradit
 Insert image…|Vložit obrázek…
 View|Zobrazení
+Syntax|Syntaxe
+Automatic|Automaticky
 View width|Šířka zobrazení
 Narrow|Úzká
 Medium|Střední
@@ -803,6 +815,8 @@ Paste|Vložiť
 Find/Replace|Hľadať/nahradiť
 Insert image…|Vložiť obrázok…
 View|Zobrazenie
+Syntax|Syntax
+Automatic|Automaticky
 View width|Šírka zobrazenia
 Narrow|Úzka
 Medium|Stredná
@@ -900,6 +914,8 @@ Paste|Pegar
 Find/Replace|Buscar/reemplazar
 Insert image…|Insertar imagen…
 View|Ver
+Syntax|Sintaxis
+Automatic|Automática
 View width|Ancho de vista
 Narrow|Estrecho
 Medium|Medio
@@ -997,6 +1013,8 @@ Paste|Colar
 Find/Replace|Localizar/substituir
 Insert image…|Inserir imagem…
 View|Exibir
+Syntax|Sintaxe
+Automatic|Automático
 View width|Largura da vista
 Narrow|Estreita
 Medium|Média
@@ -1094,6 +1112,8 @@ Paste|Incolla
 Find/Replace|Trova/sostituisci
 Insert image…|Inserisci immagine…
 View|Visualizza
+Syntax|Sintassi
+Automatic|Automatica
 View width|Larghezza vista
 Narrow|Stretta
 Medium|Media
@@ -1191,6 +1211,8 @@ Paste|Beillesztés
 Find/Replace|Keresés/csere
 Insert image…|Kép beszúrása…
 View|Nézet
+Syntax|Szintaxis
+Automatic|Automatikus
 View width|Nézet szélessége
 Narrow|Keskeny
 Medium|Közepes
@@ -1288,6 +1310,8 @@ Paste|Yapıştır
 Find/Replace|Bul/değiştir
 Insert image…|Resim ekle…
 View|Görünüm
+Syntax|Sözdizimi
+Automatic|Otomatik
 View width|Görünüm genişliği
 Narrow|Dar
 Medium|Orta
@@ -1385,6 +1409,8 @@ Paste|Lipește
 Find/Replace|Caută/înlocuiește
 Insert image…|Inserează imagine…
 View|Vizualizare
+Syntax|Sintaxă
+Automatic|Automat
 View width|Lățimea vizualizării
 Narrow|Îngustă
 Medium|Medie
@@ -1482,6 +1508,8 @@ Paste|Επικόλληση
 Find/Replace|Εύρεση/αντικατάσταση
 Insert image…|Εισαγωγή εικόνας…
 View|Προβολή
+Syntax|Σύνταξη
+Automatic|Αυτόματα
 View width|Πλάτος προβολής
 Narrow|Στενό
 Medium|Μεσαίο
@@ -1579,6 +1607,8 @@ Paste|Įklijuoti
 Find/Replace|Ieškoti/keisti
 Insert image…|Įterpti paveikslėlį…
 View|Rodinys
+Syntax|Sintaksė
+Automatic|Automatiškai
 View width|Rodinio plotis
 Narrow|Siauras
 Medium|Vidutinis
@@ -1676,6 +1706,8 @@ Paste|貼り付け
 Find/Replace|検索/置換
 Insert image…|画像を挿入…
 View|表示
+Syntax|構文
+Automatic|自動
 View width|表示幅
 Narrow|狭い
 Medium|中間
@@ -1773,6 +1805,8 @@ Paste|粘贴
 Find/Replace|查找/替换
 Insert image…|插入图片…
 View|视图
+Syntax|语法
+Automatic|自动
 View width|视图宽度
 Narrow|窄
 Medium|中
@@ -1870,6 +1904,8 @@ Paste|הדבקה
 Find/Replace|חיפוש/החלפה
 Insert image…|הוספת תמונה…
 View|תצוגה
+Syntax|תחביר
+Automatic|אוטומטי
 View width|רוחב תצוגה
 Narrow|צר
 Medium|בינוני
@@ -1967,6 +2003,8 @@ Paste|चिपकाएँ
 Find/Replace|खोजें/बदलें
 Insert image…|चित्र डालें…
 View|दृश्य
+Syntax|वाक्यविन्यास
+Automatic|स्वचालित
 View width|दृश्य की चौड़ाई
 Narrow|संकीर्ण
 Medium|मध्यम
@@ -2064,6 +2102,8 @@ Paste|পেস্ট
 Find/Replace|খুঁজুন/প্রতিস্থাপন
 Insert image…|ছবি সন্নিবেশ করুন…
 View|দেখুন
+Syntax|সিনট্যাক্স
+Automatic|স্বয়ংক্রিয়
 View width|দৃশ্যের প্রস্থ
 Narrow|সরু
 Medium|মাঝারি
@@ -2161,6 +2201,8 @@ Paste|لصق
 Find/Replace|بحث/استبدال
 Insert image…|إدراج صورة…
 View|عرض
+Syntax|بناء الجملة
+Automatic|تلقائي
 View width|عرض العرض
 Narrow|ضيق
 Medium|متوسط
@@ -2258,6 +2300,8 @@ Paste|چسپاں کریں
 Find/Replace|تلاش/تبدیل
 Insert image…|تصویر داخل کریں…
 View|منظر
+Syntax|نحو
+Automatic|خودکار
 View width|منظر کی چوڑائی
 Narrow|تنگ
 Medium|درمیانہ
