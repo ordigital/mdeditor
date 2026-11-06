@@ -61,7 +61,7 @@ list_editing:
     - inserting_and_deleting_numbered_items_updates_following_numbers
     - empty_bullet_height_and_continuation_indent_are_stable
   test_harness: 'egui headless run_ui outputs must clear textures_delta; texture tests declare max_texture_side'
-last_verification: {tests: 78, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
+last_verification: {tests: 80, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
 deployment:
   desktop_launcher: /home/adam/.local/share/applications/mdedit.desktop
   executable: target/release/mdedit
@@ -75,20 +75,20 @@ review_fixes:
   replacement: 'replace_one uses insert; replace_all uses App.checkpoint so normalization and replacement share undo history'
   tests: [replacement_keeps_numbering_and_undo_together, shift_tab_reverses_one_rendered_indentation_level]
 release_workflow:
-  current_version: 0.1.8
+  current_version: 0.1.9
   repository: ordigital/mdeditor
   branch: master
-  tag: v0.1.8
-  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.8
+  tag: v0.1.9
+  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.9
   instructions: packaging/RELEASING.md
-  notes: packaging/release-notes-0.1.8.md
-  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.8-x86_64.AppImage}
-  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.8-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE]}
+  notes: packaging/release-notes-0.1.9.md
+  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.9-x86_64.AppImage}
+  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.9-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE]}
   checksums: 'Both packages have basename.sha256 sidecars with relative filenames; verify from releases/.'
   publication: 'Annotated v<version> tag; atomic push of master and tag; gh release create --verify-tag --notes-file with two packages and two SHA-256 files.'
   caches: [releases/build/target, 'Docker volume mdedit-cargo', 'Docker volume mdedit-rustup']
   requirements: 'Docker daemon running and socket accessible, appimagetool, MinGW-w64, Rust Windows GNU target, Python >=3.11, gh authentication, GitHub SSH access.'
-  validation: '78 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.8.'
+  validation: '80 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.9.'
   git_policy: 'releases/ is ignored; commit source/index/scripts/notes and version bump, upload binaries as GitHub release assets; never force-push existing tags.'
 linked_pages_and_toolbar:
   status: 'Included in release v0.1.7.'
@@ -199,3 +199,30 @@ release_0_1_8_validation:
 version_display:
   implementation: 'src/main.rs: APP_TITLE = concat!("MDEdit ", env!("CARGO_PKG_VERSION")); initial viewport title, App.ui dynamic title and About modal title share it.'
   release_exception: 'User explicitly authorized replacing published v0.1.8 for this version-display fix. Move only tag v0.1.8 to the new commit using force-with-lease against the inspected remote tag; replace the four release assets and update release notes. Keep master fast-forward; do not generalize this exception to future releases.'
+
+file_change_detection:
+  implementation: 'src/app.rs: App.open_path/check_disk/reload_doc/modals, Doc.disk_hash, App.file_prompt/next_disk_check'
+  repeated_open: 'Canonicalize incoming paths and reuse the existing tab. Dirty buffers ask whether to save; declining keeps the buffer and tab. Clean buffers check disk immediately.'
+  polling: 'Request repaint and compare normalized UTF-8 content hashes every five seconds, including inactive and dirty tabs; defer while a modal is open. Stop at the first changed file, identify prompts by stable document ID.'
+  choices: 'External changes offer Reload, Save (overwrite disk with editor buffer), Do nothing/Escape. Acknowledged disk content is remembered so dismissal does not repeat until another content change. Successful saves update the baseline.'
+  reload: 'Re-read current disk content on confirmation, preserve syntax mode and tab identity, detect CRLF, reset saved text/cache/stats and retain the previous buffer as an undo step.'
+  safeguards: 'Existing size/binary guards apply to polling and reload. Missing, unreadable, binary and oversized files are skipped during polling; reload failures show an error and keep the prompt/buffer. Changes only to CRLF versus LF do not trigger a prompt. Polling reads guarded files synchronously on the UI thread.'
+  localization: 'Five new dialog strings in all 22 non-English tables; English uses source keys.'
+  tests: [repeated_open_and_external_changes_preserve_user_choices]
+
+release_0_1_9_validation:
+  checks: '80 passed, 3 ignored manual benchmarks; fmt, diff check, Clippy -D warnings; local release build; Docker Ubuntu 22.04 AppImage; MinGW Windows ZIP.'
+  integrity: 'SHA-256 sidecars, ZIP CRC/content and EXE equality, ELF max GLIBC_2.35 and PE imports checked.'
+  limitations: 'No interactive desktop or Windows/Wine runtime tests.'
+
+ctrl_click_navigation:
+  implementation: 'src/app.rs: App.editor, link_hit, paint_decos/paint_table; src/md.rs: TableRow.links/layout_table'
+  behavior: 'Ctrl (or platform Command) plus primary click suppresses TextEdit pointer editing and preserves the source cursor, so rendered tables/blocks stay rendered. Keyboard shortcuts remain active outside pointer navigation.'
+  tables: 'Keep per-cell link decorations alongside galleys. Hit-test using the painted cell origin and alignment, wrapped glyph rows, clipping and character ranges; route links through existing App.open_link.'
+  tests: [ctrl_click_table_link_keeps_preview_and_source_cursor]
+  release_exception: 'User explicitly authorized folding this fix into the preceding commit/push and replacing published v0.1.9. Amend only the latest release commit, move v0.1.9, push master/tag atomically with explicit force-with-lease against inspected remote refs, then replace four assets and notes. This exception does not authorize future history rewrites.'
+
+coffee_link:
+  implementation: 'src/app.rs: COFFEE_LABEL/COFFEE_URL, App.status_bar/document_status and About modal; README.md/README.pl.md'
+  behavior: 'Show the exact label ♡ Buy me a coffee in every language, linking to https://buymeacoffee.com/adamstrad. Right-aligned in the status bar, including when there is no document; at the very bottom of About below OK; also near the top of both English and Polish README files.'
+  release_exception: 'User explicitly authorized adding this link to the preceding commit/push and replacing v0.1.9 again. Amend latest release commit, move only v0.1.9 and atomically push master/tag with explicit force-with-lease against inspected refs; replace four assets and notes.'

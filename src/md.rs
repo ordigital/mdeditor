@@ -127,6 +127,7 @@ pub struct TableRow {
     /// Char index of the source line, whose (hidden) row reserves the row's height.
     pub ci: usize,
     pub cells: Vec<Arc<Galley>>,
+    pub links: Vec<Vec<Deco>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Default)]
@@ -345,14 +346,18 @@ fn layout_table(
         .iter()
         .zip(&texts)
         .map(|(&l, row)| {
-            let cells: Vec<Arc<Galley>> = row
+            let (cells, links): (Vec<_>, Vec<_>) = row
                 .iter()
                 .enumerate()
-                .map(|(c, t)| cell_galley(cx, &small, t, widths[c] - 2.0 * CELL_PAD, ppp))
-                .collect();
+                .map(|(c, t)| {
+                    let (galley, decos) =
+                        build(t, None, widths[c] - 2.0 * CELL_PAD, &small, ppp, &mut |_| None, &mut *cx.layout);
+                    (galley, decos.into_iter().filter(|d| matches!(d, Deco::Link { .. })).collect::<Vec<_>>())
+                })
+                .unzip();
             let height = cells.iter().map(|g| g.size().y + 12.0).fold(min_height, f32::max).ceil();
             heights.push((l, height as u16));
-            TableRow { ci: line_ci[l], cells }
+            TableRow { ci: line_ci[l], cells, links }
         })
         .collect();
     (Deco::Table { rows, widths, align }, heights)

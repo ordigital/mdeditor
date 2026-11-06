@@ -41,6 +41,8 @@ const RECENT: usize = 10;
 const TITLE_SCALE: f32 = 1.618;
 /// Obsidian's `--background-secondary` (menu, tabs, dialogs) and a lighter status bar.
 const CHROME: Color32 = Color32::from_rgb(0x26, 0x26, 0x26);
+const COFFEE_LABEL: &str = "♡ Buy me a coffee";
+const COFFEE_URL: &str = "https://buymeacoffee.com/adamstrad";
 const STATUS: Color32 = Color32::from_rgb(0x2e, 0x2e, 0x2e);
 
 #[derive(Clone, Copy, PartialEq)]
@@ -215,11 +217,18 @@ enum SyntaxMode {
     Language(Syntax),
 }
 
+fn disk_hash(text: &str) -> u64 {
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hash);
+    hash.finish()
+}
+
 struct Doc {
     id: u64,
     path: Option<PathBuf>,
     text: String,
     saved: String,
+    disk_hash: u64,
     cache: Option<Cache>,
     analysis: highlight::Analysis,
     code_layout: highlight::LayoutCache,
@@ -244,6 +253,7 @@ impl Doc {
             syntax: path.as_deref().and_then(Syntax::from_path),
             syntax_mode: SyntaxMode::Automatic,
             path,
+            disk_hash: disk_hash(&text),
             saved: text.clone(),
             prev: text.clone(),
             text,
@@ -509,6 +519,8 @@ pub struct App {
     cfg_changed_at: Option<f64>,
     error: Option<String>,
     close_queue: Vec<u64>,
+    file_prompt: Option<(u64, bool)>,
+    next_disk_check: f64,
     quit_after: bool,
     allow_quit: bool,
     rx: Receiver<Vec<PathBuf>>,
@@ -848,6 +860,8 @@ impl App {
             cfg_changed_at: None,
             error: None,
             close_queue: vec![],
+            file_prompt: None,
+            next_disk_check: 0.0,
             quit_after: false,
             allow_quit: false,
             rx,
@@ -906,8 +920,16 @@ impl App {
 
     /// Opens `p` in a tab (or switches to it). Binary and very large files are refused.
     fn open_path(&mut self, p: PathBuf) {
+        let p = p.canonicalize().unwrap_or(p);
         if let Some(i) = self.docs.iter().position(|d| d.path.as_deref() == Some(&p)) {
             self.active = i;
+            if self.file_prompt.is_none() {
+                if self.docs[i].dirty() {
+                    self.file_prompt = Some((self.docs[i].id, false));
+                } else {
+                    self.check_disk(i);
+                }
+            }
             return;
         }
         if let Some(why) = files::open_warning(&p) {
@@ -934,6 +956,48 @@ impl App {
         } else {
             self.docs.push(doc);
             self.active = self.docs.len() - 1;
+        }
+    }
+
+    /// Compare contents rather than timestamps: atomic replacements and coarse mtimes are common.
+    fn check_disk(&mut self, i: usize) {
+        let doc = &mut self.docs[i];
+        let Some(path) = &doc.path else { return };
+        if files::open_warning(path).is_some() {
+            return;
+        }
+        if let Ok(raw) = std::fs::read_to_string(path) {
+            let hash = disk_hash(&raw.replace("\r\n", "\n"));
+            if hash != doc.disk_hash {
+                doc.disk_hash = hash;
+                self.file_prompt = Some((doc.id, true));
+            }
+        }
+    }
+
+    fn reload_doc(&mut self, i: usize) -> bool {
+        let Some(path) = self.docs[i].path.clone() else { return false };
+        if let Some(why) = files::open_warning(&path) {
+            self.error = Some(self.t(why).into());
+            return false;
+        }
+        match std::fs::read_to_string(&path) {
+            Ok(raw) => {
+                let doc = &mut self.docs[i];
+                doc.checkpoint(self.now);
+                doc.text = raw.replace("\r\n", "\n");
+                doc.crlf = raw.contains("\r\n");
+                doc.saved = doc.text.clone();
+                doc.disk_hash = disk_hash(&doc.text);
+                doc.checkpoint(self.now);
+                doc.cache = None;
+                doc.stats.set(None);
+                true
+            }
+            Err(e) => {
+                self.error = Some(format!("{}: {e}", path.display()));
+                false
+            }
         }
     }
 
@@ -968,6 +1032,7 @@ impl App {
         match std::fs::write(&path, data) {
             Ok(()) => {
                 doc.saved = doc.text.clone();
+                doc.disk_hash = disk_hash(&doc.text);
                 true
             }
             Err(e) => {
@@ -1190,7 +1255,8 @@ impl App {
     }
 
     fn has_modal(&self) -> bool {
-        !self.close_queue.is_empty()
+        self.file_prompt.is_some()
+            || !self.close_queue.is_empty()
             || self.error.is_some()
             || self.about
             || self.settings
@@ -1941,7 +2007,13 @@ impl App {
                         galley
                     };
                     let min_h = (ui.available_height() - 20.0).max(200.0);
+                    // Link navigation must not move the source cursor and reveal a rendered block.
+                    let navigating = ctx.input(|i| {
+                        (i.modifiers.command || i.modifiers.ctrl)
+                            && (i.pointer.primary_down() || i.pointer.primary_clicked() || i.pointer.primary_released())
+                    });
                     let out = TextEdit::multiline(&mut doc.text)
+                        .interactive(!navigating)
                         .id(id)
                         .frame(egui::Frame::NONE)
                         .margin(Margin::ZERO)
@@ -1987,7 +2059,7 @@ impl App {
                     let at = |ci: usize| g.pos_from_cursor(CCursor::new(ci)).translate(o);
                     let painter = ui.painter();
                     let pointer = ctx.input(|i| i.pointer.interact_pos());
-                    let clicked = out.response.clicked();
+                    let clicked = out.response.clicked() || (navigating && ctx.input(|i| i.pointer.primary_clicked()));
                     let mut bgs = vec![];
                     let deco_cx = DecoCx {
                         ctx: &ctx,
@@ -2064,6 +2136,47 @@ impl App {
         let enter = ctx.input(|i| i.key_pressed(Key::Enter));
         let lang = self.cfg.lang;
         let t = |s| tr(lang, s);
+        if let Some((id, external)) = self.file_prompt {
+            if let Some(i) = self.docs.iter().position(|d| d.id == id) {
+                self.active = i;
+                let name = self.docs[i].title(lang);
+                let mut choice = None;
+                dialog(
+                    ctx,
+                    "file_change_modal",
+                    t(if external { "File changed on disk" } else { "Unsaved changes" }),
+                    460.0,
+                    |ui| {
+                        ui.label(&name);
+                        ui.label(t(if external {
+                            "The file was changed outside the editor. What would you like to do?"
+                        } else {
+                            "Save changes before opening this file again?"
+                        }));
+                        ui.add_space(16.0);
+                        centered_row(ui, |ui| {
+                            if external && ui.button(t("Reload")).clicked() {
+                                choice = Some(0);
+                            }
+                            if ui.button(t("Save")).clicked() {
+                                choice = Some(1);
+                            }
+                            if ui.button(t("Do nothing")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                                choice = Some(2);
+                            }
+                        });
+                    },
+                );
+                match choice {
+                    Some(0) if self.reload_doc(i) => self.file_prompt = None,
+                    Some(1) if self.save(i, false) => self.file_prompt = None,
+                    Some(2) => self.file_prompt = None,
+                    _ => {}
+                }
+            } else {
+                self.file_prompt = None;
+            }
+        }
         if let Some(&id) = self.close_queue.first() {
             let Some(i) = self.docs.iter().position(|d| d.id == id) else {
                 self.close_queue.remove(0);
@@ -2252,7 +2365,12 @@ impl App {
                     ui.label(format!("{} Claude/Codex.", t("Code written with the help of")));
                 });
                 ui.add_space(16.0);
-                centered_row(ui, |ui| ui.button("OK").clicked() || enter)
+                let close = centered_row(ui, |ui| ui.button("OK").clicked() || enter);
+                ui.add_space(8.0);
+                ui.vertical_centered(|ui| {
+                    ui.hyperlink_to(COFFEE_LABEL, COFFEE_URL);
+                });
+                close
             });
             if r.inner || r.should_close() {
                 self.about = false;
@@ -2346,6 +2464,13 @@ impl App {
     }
 
     fn status_bar(&self, ui: &mut Ui) {
+        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+            ui.hyperlink_to(RichText::new(COFFEE_LABEL).small(), COFFEE_URL);
+            ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| self.document_status(ui));
+        });
+    }
+
+    fn document_status(&self, ui: &mut Ui) {
         let Some(doc) = self.docs.get(self.active) else {
             return;
         };
@@ -2439,7 +2564,11 @@ fn paint_decos(cx: &DecoCx, decos: &[Deco], bgs: &mut Vec<Shape>) -> DecoEvents 
                 let x = r.min.x - cx.look.indent() * 0.5;
                 cx.painter.circle_filled(pos2(x, r.center().y), (cx.look.size * 0.15).max(2.5), md::DIM);
             }
-            Deco::Table { rows, widths, align } => paint_table(cx.painter, cx.pos.x, rows, widths, align, &at),
+            Deco::Table { rows, widths, align } => {
+                if let Some(url) = paint_table(cx, rows, widths, align, &at) {
+                    events.link = Some(url);
+                }
+            }
             Deco::Check { ci, byte, checked } => {
                 let r = at(*ci);
                 let side = (cx.look.size * 1.0).round();
@@ -2472,14 +2601,8 @@ fn paint_decos(cx: &DecoCx, decos: &[Deco], bgs: &mut Vec<Shape>) -> DecoEvents 
                 }
             }
             Deco::Link { start, end, url } => {
-                if cx.clicked
-                    && cx.ctx.input(|i| i.modifiers.command)
-                    && let Some(p) = cx.pointer
-                {
-                    let c = cx.galley.cursor_from_pos(p - cx.pos).index.0;
-                    if (*start..*end).contains(&c) {
-                        events.link = Some(url.clone());
-                    }
+                if link_hit(cx, cx.galley, cx.pos, *start, *end) && cx.clicked {
+                    events.link = Some(url.clone());
                 }
             }
         }
@@ -2487,20 +2610,39 @@ fn paint_decos(cx: &DecoCx, decos: &[Deco], bgs: &mut Vec<Shape>) -> DecoEvents 
     events
 }
 
+fn link_hit(cx: &DecoCx, galley: &Galley, pos: Pos2, start: usize, end: usize) -> bool {
+    if !cx.ctx.input(|i| i.modifiers.command || i.modifiers.ctrl) {
+        return false;
+    }
+    let Some(pointer) = cx.pointer.filter(|p| cx.painter.clip_rect().contains(*p)) else { return false };
+    let local = pointer - pos;
+    // Check glyph rows, not nearest-cursor alone (which also matches blank cell space).
+    let hit = galley.rows.iter().any(|row| {
+        let rect = row.rect().translate(pos.to_vec2());
+        rect.contains(pointer)
+    }) && (start..end).contains(&galley.cursor_from_pos(local).index.0);
+    if hit {
+        cx.ctx.set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    hit
+}
+
 /// Draws a markdown table over the hidden source lines (each line reserved its row's height).
 fn paint_table(
-    painter: &egui::Painter,
-    x0: f32,
+    cx: &DecoCx,
     rows: &[md::TableRow],
     widths: &[f32],
     align: &[Align],
     at: &dyn Fn(usize) -> Rect,
-) {
+) -> Option<String> {
+    let painter = cx.painter;
+    let x0 = cx.pos.x;
+    let mut clicked = None;
     const PAD: f32 = 12.0;
     let right = x0 + widths.iter().sum::<f32>();
     let stroke = Stroke::new(1.0, md::BORDER);
     let (Some(first), Some(last)) = (rows.first(), rows.last()) else {
-        return;
+        return None;
     };
     let (top, bottom) = (at(first.ci).min.y, at(last.ci).max.y);
     for (r, row) in rows.iter().enumerate() {
@@ -2519,7 +2661,16 @@ fn paint_table(
                     Some(Align::Max) => cell.max.x - g.size().x,
                     _ => cell.min.x,
                 };
-                painter.galley(pos2(gx, cell.center().y - g.size().y / 2.0), g.clone(), md::TEXT);
+                let pos = pos2(gx, cell.center().y - g.size().y / 2.0);
+                painter.galley(pos, g.clone(), md::TEXT);
+                for link in &row.links[c] {
+                    if let Deco::Link { start, end, url } = link
+                        && link_hit(cx, g, pos, *start, *end)
+                        && cx.clicked
+                    {
+                        clicked = Some(url.clone());
+                    }
+                }
             }
             x += w;
         }
@@ -2531,6 +2682,7 @@ fn paint_table(
         x += w;
         painter.vline(x, top..=bottom, stroke);
     }
+    clicked
 }
 
 /// Lays out `add` in a horizontal row centered in the available width
@@ -2787,6 +2939,16 @@ impl eframe::App for App {
             self.exit(&ctx);
         }
 
+        ctx.request_repaint_after(std::time::Duration::from_secs(5));
+        if self.now >= self.next_disk_check && !self.has_modal() {
+            self.next_disk_check = self.now + 5.0;
+            for i in 0..self.docs.len() {
+                self.check_disk(i);
+                if self.file_prompt.is_some() {
+                    break;
+                }
+            }
+        }
         let modal_open = self.has_modal();
         let mut acts = vec![];
         if !modal_open {
@@ -2903,6 +3065,47 @@ impl eframe::App for App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn repeated_open_and_external_changes_preserve_user_choices() {
+        let dir = std::env::temp_dir().join(format!("mdedit-disk-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("external.md");
+        std::fs::write(&path, "original\r\n").unwrap();
+        let (mut app, _) = app_with("");
+        app.open_path(path.clone());
+        app.docs[0].text = "local\n".into();
+        app.open_path(dir.join("./external.md"));
+        assert_eq!(app.docs.len(), 1);
+        assert_eq!(app.file_prompt, Some((app.docs[0].id, false)));
+        assert!(app.save(0, false));
+        app.file_prompt = None;
+        app.check_disk(0);
+        assert!(app.file_prompt.is_none());
+        std::fs::write(&path, "outside\r\n").unwrap();
+        app.check_disk(0);
+        assert_eq!(app.file_prompt, Some((app.docs[0].id, true)));
+        assert_eq!(app.docs[0].text, "local\n");
+        app.file_prompt = None; // Do nothing acknowledges this version only.
+        app.check_disk(0);
+        assert!(app.file_prompt.is_none());
+        std::fs::write(&path, "newer\r\n").unwrap();
+        app.check_disk(0);
+        assert!(app.file_prompt.is_some());
+        assert!(app.reload_doc(0));
+        assert_eq!(app.docs[0].text, "newer\n");
+        assert!(!app.docs[0].dirty());
+        assert!(app.docs[0].crlf);
+        app.docs[0].step(0.0, false);
+        assert_eq!(app.docs[0].text, "local\n");
+        assert!(app.docs[0].dirty());
+        app.file_prompt = None;
+        app.check_disk(0);
+        assert!(app.file_prompt.is_none());
+        assert!(app.save(0, false));
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "local\r\n");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn linked_page_shortcut_enter_creates_file_and_followable_link() {
@@ -3847,6 +4050,100 @@ mod tests {
         let (g, _) = layout("a\n\nb", None, 500.0);
         assert_eq!(g.rows.len(), 3);
         assert!(g.rows[1].size.y > 20.0, "blank line height: {}", g.rows[1].size.y);
+    }
+
+    #[test]
+    fn ctrl_click_table_link_keeps_preview_and_source_cursor() {
+        for alignment in ["---", ":---:", "---:"] {
+            let text = format!("Outside\n\n| Link |\n| {alignment} |\n| [Zażółć](https://example.com) |\n");
+            let (mut app, ctx) = app_with(&text);
+            let render = |app: &mut App, modifiers: Modifiers, mut events: Vec<Event>| {
+                let mut link = None;
+                events.insert(0, Event::ModifiersChanged(modifiers));
+                let input = RawInput {
+                    events,
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 800.0))),
+                    ..Default::default()
+                };
+                let output = ctx.run_ui(input, |ui| {
+                    link = app.editor(ui).0;
+                });
+                (output, link)
+            };
+            let (mut output, _) = render(&mut app, Modifiers::NONE, vec![]);
+            output.textures_delta.clear();
+            app.set_selection(&ctx, 0, 0);
+            let (mut output, _) = render(&mut app, Modifiers::NONE, vec![]);
+            output.textures_delta.clear();
+            let cache = app.docs[0].cache.as_ref().unwrap();
+            let (cell, start) = cache
+                .decos
+                .iter()
+                .find_map(|d| {
+                    if let Deco::Table { rows, .. } = d
+                        && let Deco::Link { start, .. } = &rows[1].links[0][0]
+                    {
+                        return Some((rows[1].cells[0].clone(), *start));
+                    }
+                    None
+                })
+                .unwrap();
+            let pos = output
+                .shapes
+                .iter()
+                .find_map(|s| {
+                    if let Shape::Text(t) = &s.shape
+                        && Arc::ptr_eq(&t.galley, &cell)
+                    {
+                        return Some(
+                            t.pos + cell.pos_from_cursor(CCursor::new(start)).center().to_vec2() + vec2(2.0, 0.0),
+                        );
+                    }
+                    None
+                })
+                .expect("painted table cell");
+            for pressed in [true, false] {
+                let (mut output, link) = render(
+                    &mut app,
+                    Modifiers::CTRL,
+                    vec![
+                        Event::PointerMoved(pos),
+                        Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: Modifiers::CTRL,
+                        },
+                    ],
+                );
+                output.textures_delta.clear();
+                assert_eq!(link.as_deref(), if pressed { None } else { Some("https://example.com") });
+                assert_eq!(app.selection(&ctx), Some((0, 0)));
+                assert!(app.docs[0].cache.as_ref().unwrap().decos.iter().any(|d| matches!(d, Deco::Table { .. })));
+                assert_eq!(app.docs[0].text, text);
+            }
+            let (mut output, _) = render(&mut app, Modifiers::NONE, vec![]);
+            output.textures_delta.clear();
+            for pressed in [true, false] {
+                let (mut output, _) = render(
+                    &mut app,
+                    Modifiers::NONE,
+                    vec![
+                        Event::PointerMoved(pos),
+                        Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: Modifiers::NONE,
+                        },
+                    ],
+                );
+                output.textures_delta.clear();
+            }
+            let (mut output, _) = render(&mut app, Modifiers::NONE, vec![]);
+            output.textures_delta.clear();
+            assert!(!app.docs[0].cache.as_ref().unwrap().decos.iter().any(|d| matches!(d, Deco::Table { .. })));
+        }
     }
 
     #[test]

@@ -208,6 +208,11 @@ fn source(lang: Lang) -> &'static str {
 }
 
 const PL: &str = r#"
+File changed on disk|Plik zmienił się na dysku
+The file was changed outside the editor. What would you like to do?|Plik został zmieniony poza edytorem. Co chcesz zrobić?
+Save changes before opening this file again?|Zapisać zmiany przed ponownym otwarciem tego pliku?
+Reload|Wczytaj ponownie
+Do nothing|Nic nie rób
 File|Plik
 Open…|Otwórz…
 Save|Zapisz
@@ -307,6 +312,11 @@ Error|Błąd
 "#;
 
 const DE: &str = r#"
+File changed on disk|Datei auf dem Datenträger geändert
+The file was changed outside the editor. What would you like to do?|Die Datei wurde außerhalb des Editors geändert. Was möchten Sie tun?
+Save changes before opening this file again?|Änderungen vor dem erneuten Öffnen dieser Datei speichern?
+Reload|Neu laden
+Do nothing|Nichts tun
 File|Datei
 Open…|Öffnen…
 Save|Speichern
@@ -406,6 +416,11 @@ Error|Fehler
 "#;
 
 const FR: &str = r#"
+File changed on disk|Fichier modifié sur le disque
+The file was changed outside the editor. What would you like to do?|Le fichier a été modifié hors de l’éditeur. Que voulez-vous faire ?
+Save changes before opening this file again?|Enregistrer les modifications avant de rouvrir ce fichier ?
+Reload|Recharger
+Do nothing|Ne rien faire
 File|Fichier
 Open…|Ouvrir…
 Save|Enregistrer
@@ -505,6 +520,11 @@ Error|Erreur
 "#;
 
 const RU: &str = r#"
+File changed on disk|Файл изменён на диске
+The file was changed outside the editor. What would you like to do?|Файл изменён вне редактора. Что вы хотите сделать?
+Save changes before opening this file again?|Сохранить изменения перед повторным открытием файла?
+Reload|Перезагрузить
+Do nothing|Ничего не делать
 File|Файл
 Open…|Открыть…
 Save|Сохранить
@@ -604,6 +624,11 @@ Error|Ошибка
 "#;
 
 const UK: &str = r#"
+File changed on disk|Файл змінено на диску
+The file was changed outside the editor. What would you like to do?|Файл змінено поза редактором. Що ви хочете зробити?
+Save changes before opening this file again?|Зберегти зміни перед повторним відкриттям файлу?
+Reload|Перезавантажити
+Do nothing|Нічого не робити
 File|Файл
 Open…|Відкрити…
 Save|Зберегти
@@ -703,6 +728,11 @@ Error|Помилка
 "#;
 
 const CS: &str = r#"
+File changed on disk|Soubor byl změněn na disku
+The file was changed outside the editor. What would you like to do?|Soubor byl změněn mimo editor. Co chcete udělat?
+Save changes before opening this file again?|Uložit změny před opětovným otevřením souboru?
+Reload|Načíst znovu
+Do nothing|Nedělat nic
 File|Soubor
 Open…|Otevřít…
 Save|Uložit
@@ -802,6 +832,11 @@ Error|Chyba
 "#;
 
 const SK: &str = r#"
+File changed on disk|Súbor bol zmenený na disku
+The file was changed outside the editor. What would you like to do?|Súbor bol zmenený mimo editora. Čo chcete urobiť?
+Save changes before opening this file again?|Uložiť zmeny pred opätovným otvorením súboru?
+Reload|Načítať znova
+Do nothing|Nerobiť nič
 File|Súbor
 Open…|Otvoriť…
 Save|Uložiť
@@ -901,6 +936,11 @@ Error|Chyba
 "#;
 
 const ES: &str = r#"
+File changed on disk|Archivo modificado en el disco
+The file was changed outside the editor. What would you like to do?|El archivo se modificó fuera del editor. ¿Qué desea hacer?
+Save changes before opening this file again?|¿Guardar los cambios antes de volver a abrir este archivo?
+Reload|Volver a cargar
+Do nothing|No hacer nada
 File|Archivo
 Open…|Abrir…
 Save|Guardar
@@ -1000,6 +1040,11 @@ Error|Error
 "#;
 
 const PT: &str = r#"
+File changed on disk|Arquivo alterado no disco
+The file was changed outside the editor. What would you like to do?|O arquivo foi alterado fora do editor. O que deseja fazer?
+Save changes before opening this file again?|Salvar as alterações antes de abrir este arquivo novamente?
+Reload|Recarregar
+Do nothing|Não fazer nada
 File|Arquivo
 Open…|Abrir…
 Save|Salvar
@@ -1099,6 +1144,11 @@ Error|Erro
 "#;
 
 const IT: &str = r#"
+File changed on disk|File modificato sul disco
+The file was changed outside the editor. What would you like to do?|Il file è stato modificato fuori dall’editor. Cosa vuoi fare?
+Save changes before opening this file again?|Salvare le modifiche prima di riaprire questo file?
+Reload|Ricarica
+Do nothing|Non fare nulla
 File|File
 Open…|Apri…
 Save|Salva
@@ -1198,6 +1248,11 @@ Error|Errore
 "#;
 
 const HU: &str = r#"
+File changed on disk|A fájl megváltozott a lemezen
+The file was changed outside the editor. What would you like to do?|A fájlt a szerkesztőn kívül módosították. Mit szeretne tenni?
+Save changes before opening this file again?|Menti a módosításokat a fájl újbóli megnyitása előtt?
+Reload|Újratöltés
+Do nothing|Ne tegyen semmit
 File|Fájl
 Open…|Megnyitás…
 Save|Mentés
@@ -1297,6 +1352,11 @@ Error|Hiba
 "#;
 
 const TR: &str = r#"
+File changed on disk|Dosya diskte değişti
+The file was changed outside the editor. What would you like to do?|Dosya düzenleyici dışında değiştirildi. Ne yapmak istersiniz?
+Save changes before opening this file again?|Bu dosyayı yeniden açmadan önce değişiklikler kaydedilsin mi?
+Reload|Yeniden yükle
+Do nothing|Hiçbir şey yapma
 File|Dosya
 Open…|Aç…
 Save|Kaydet
@@ -1396,6 +1456,11 @@ Error|Hata
 "#;
 
 const RO: &str = r#"
+File changed on disk|Fișier modificat pe disc
+The file was changed outside the editor. What would you like to do?|Fișierul a fost modificat în afara editorului. Ce doriți să faceți?
+Save changes before opening this file again?|Salvați modificările înainte de a redeschide acest fișier?
+Reload|Reîncarcă
+Do nothing|Nu face nimic
 File|Fișier
 Open…|Deschide…
 Save|Salvează
@@ -1495,6 +1560,11 @@ Error|Eroare
 "#;
 
 const EL: &str = r#"
+File changed on disk|Το αρχείο άλλαξε στον δίσκο
+The file was changed outside the editor. What would you like to do?|Το αρχείο άλλαξε εκτός του επεξεργαστή. Τι θέλετε να κάνετε;
+Save changes before opening this file again?|Αποθήκευση αλλαγών πριν ανοίξετε ξανά το αρχείο;
+Reload|Επαναφόρτωση
+Do nothing|Καμία ενέργεια
 File|Αρχείο
 Open…|Άνοιγμα…
 Save|Αποθήκευση
@@ -1594,6 +1664,11 @@ Error|Σφάλμα
 "#;
 
 const LT: &str = r#"
+File changed on disk|Failas pakeistas diske
+The file was changed outside the editor. What would you like to do?|Failas pakeistas už redaktoriaus ribų. Ką norite daryti?
+Save changes before opening this file again?|Išsaugoti pakeitimus prieš vėl atveriant šį failą?
+Reload|Įkelti iš naujo
+Do nothing|Nieko nedaryti
 File|Failas
 Open…|Atidaryti…
 Save|Įrašyti
@@ -1693,6 +1768,11 @@ Error|Klaida
 "#;
 
 const JA: &str = r#"
+File changed on disk|ディスク上のファイルが変更されました
+The file was changed outside the editor. What would you like to do?|ファイルがエディター外で変更されました。どうしますか？
+Save changes before opening this file again?|このファイルを再度開く前に変更を保存しますか？
+Reload|再読み込み
+Do nothing|何もしない
 File|ファイル
 Open…|開く…
 Save|保存
@@ -1792,6 +1872,11 @@ Error|エラー
 "#;
 
 const ZH: &str = r#"
+File changed on disk|磁盘上的文件已更改
+The file was changed outside the editor. What would you like to do?|文件已在编辑器外部更改。您想如何处理？
+Save changes before opening this file again?|重新打开此文件前保存更改吗？
+Reload|重新加载
+Do nothing|不执行任何操作
 File|文件
 Open…|打开…
 Save|保存
@@ -1891,6 +1976,11 @@ Error|错误
 "#;
 
 const HE: &str = r#"
+File changed on disk|הקובץ השתנה בדיסק
+The file was changed outside the editor. What would you like to do?|הקובץ השתנה מחוץ לעורך. מה ברצונך לעשות?
+Save changes before opening this file again?|לשמור שינויים לפני פתיחת הקובץ מחדש?
+Reload|טעינה מחדש
+Do nothing|לא לעשות דבר
 File|קובץ
 Open…|פתיחה…
 Save|שמירה
@@ -1990,6 +2080,11 @@ Error|שגיאה
 "#;
 
 const HI: &str = r#"
+File changed on disk|डिस्क पर फ़ाइल बदल गई
+The file was changed outside the editor. What would you like to do?|फ़ाइल संपादक के बाहर बदली गई है। आप क्या करना चाहते हैं?
+Save changes before opening this file again?|इस फ़ाइल को फिर से खोलने से पहले बदलाव सहेजें?
+Reload|फिर से लोड करें
+Do nothing|कुछ न करें
 File|फ़ाइल
 Open…|खोलें…
 Save|सहेजें
@@ -2089,6 +2184,11 @@ Error|त्रुटि
 "#;
 
 const BN: &str = r#"
+File changed on disk|ডিস্কে ফাইল পরিবর্তিত হয়েছে
+The file was changed outside the editor. What would you like to do?|ফাইলটি সম্পাদকের বাইরে পরিবর্তিত হয়েছে। আপনি কী করতে চান?
+Save changes before opening this file again?|ফাইলটি আবার খোলার আগে পরিবর্তন সংরক্ষণ করবেন?
+Reload|আবার লোড করুন
+Do nothing|কিছু করবেন না
 File|ফাইল
 Open…|খুলুন…
 Save|সংরক্ষণ
@@ -2188,6 +2288,11 @@ Error|ত্রুটি
 "#;
 
 const AR: &str = r#"
+File changed on disk|تم تغيير الملف على القرص
+The file was changed outside the editor. What would you like to do?|تم تغيير الملف خارج المحرر. ماذا تريد أن تفعل؟
+Save changes before opening this file again?|هل تريد حفظ التغييرات قبل فتح هذا الملف مجددًا؟
+Reload|إعادة التحميل
+Do nothing|عدم فعل شيء
 File|ملف
 Open…|فتح…
 Save|حفظ
@@ -2287,6 +2392,11 @@ Error|خطأ
 "#;
 
 const UR: &str = r#"
+File changed on disk|ڈسک پر فائل تبدیل ہو گئی
+The file was changed outside the editor. What would you like to do?|فائل ایڈیٹر کے باہر تبدیل ہوئی ہے۔ آپ کیا کرنا چاہتے ہیں؟
+Save changes before opening this file again?|اس فائل کو دوبارہ کھولنے سے پہلے تبدیلیاں محفوظ کریں؟
+Reload|دوبارہ لوڈ کریں
+Do nothing|کچھ نہ کریں
 File|فائل
 Open…|کھولیں…
 Save|محفوظ کریں

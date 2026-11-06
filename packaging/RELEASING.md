@@ -1,7 +1,7 @@
 # Release workflow
 
 Repository: `git@github.com:ordigital/mdeditor.git`, branch `master`. Releases use
-annotated tags `v<version>` and titles `MDEdit <version>`. Version 0.1.8 follows
+annotated tags `v<version>` and titles `MDEdit <version>`. Version 0.1.9 follows
 0.1.5's Linux AppImage + portable Windows ZIP format. Artifacts in `releases/`
 are ignored by Git and uploaded to GitHub Releases instead.
 
@@ -27,11 +27,11 @@ are ignored by Git and uploaded to GitHub Releases instead.
    MinGW-w64 (`x86_64-w64-mingw32-gcc`). The ZIP contains only `MDEdit.exe` and
    `LICENSE`; the script also writes its SHA-256 file. Builds use Cargo.lock.
 7. In `releases/`, generate and check the AppImage checksum, substituting the actual
-   version for 0.1.8:
+   version for 0.1.9:
 
    ```sh
-   sha256sum MDEdit-0.1.8-x86_64.AppImage > MDEdit-0.1.8-x86_64.AppImage.sha256
-   sha256sum -c MDEdit-0.1.8-x86_64.AppImage.sha256 MDEdit-0.1.8-windows-x86_64.zip.sha256
+   sha256sum MDEdit-0.1.9-x86_64.AppImage > MDEdit-0.1.9-x86_64.AppImage.sha256
+   sha256sum -c MDEdit-0.1.9-x86_64.AppImage.sha256 MDEdit-0.1.9-windows-x86_64.zip.sha256
    ```
 
    Check ZIP CRCs/content with Python zipfile; compare the archived EXE with the
@@ -39,17 +39,17 @@ are ignored by Git and uploaded to GitHub Releases instead.
    releases/build/AppDir/usr/bin/mdedit` and Windows imports with
    `x86_64-w64-mingw32-objdump -p target/x86_64-pc-windows-gnu/release/mdedit.exe`.
    State runtime-test limits accurately: v0.1.5 was smoke-tested under Wine;
-   v0.1.8 received static/package checks, without Windows/Wine runtime testing.
+   v0.1.9 received static/package checks, without Windows/Wine runtime testing.
 8. Finish index/notes, stage explicit files, commit, create the annotated version
    tag, and push branch and tag (no force):
 
    ```sh
-   git tag -a v0.1.8 -m 'MDEdit 0.1.8'
-   git push --atomic origin master v0.1.8
-   gh release create v0.1.8 --repo ordigital/mdeditor --verify-tag --title 'MDEdit 0.1.8' --notes-file packaging/release-notes-0.1.8.md releases/MDEdit-0.1.8-x86_64.AppImage releases/MDEdit-0.1.8-x86_64.AppImage.sha256 releases/MDEdit-0.1.8-windows-x86_64.zip releases/MDEdit-0.1.8-windows-x86_64.zip.sha256
+   git tag -a v0.1.9 -m 'MDEdit 0.1.9'
+   git push --atomic origin master v0.1.9
+   gh release create v0.1.9 --repo ordigital/mdeditor --verify-tag --title 'MDEdit 0.1.9' --notes-file packaging/release-notes-0.1.9.md releases/MDEdit-0.1.9-x86_64.AppImage releases/MDEdit-0.1.9-x86_64.AppImage.sha256 releases/MDEdit-0.1.9-windows-x86_64.zip releases/MDEdit-0.1.9-windows-x86_64.zip.sha256
    ```
 
-9. Verify the remote branch/tag and `gh release view v0.1.8 --repo
+9. Verify the remote branch/tag and `gh release view v0.1.9 --repo
    ordigital/mdeditor --json url,tagName,isDraft,assets`; confirm all four assets
    are uploaded, their sizes/digests match local files, and `git status` is clean.
    A failed upload is recoverable; inspect release state before retrying, and do
