@@ -1,5 +1,7 @@
 ## What's new
 
+- Window title and About title bar display the version from Cargo.toml. Release 0.1.8 packages were replaced to include this fix.
+
 - New **Syntax** menu: Automatic, Markdown, XML, TOML, JSON, YAML, INI, .env, Bash, HTML, CSS, PHP, Python, Rust, C, C++, Go and JavaScript.
 - Override highlighting for the current tab, including unsaved files. A manual selection survives Save/Save As; Automatic restores filename-based detection. Closing/reopening a file starts in Automatic mode.
 - Switching syntax refreshes highlighting and the relevant Markdown editing controls without changing text, filename or undo history.

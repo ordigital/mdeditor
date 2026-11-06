@@ -14,6 +14,8 @@ mod md;
 use std::path::PathBuf;
 use std::sync::mpsc;
 
+const APP_TITLE: &str = concat!("MDEdit ", env!("CARGO_PKG_VERSION"));
+
 fn main() -> eframe::Result {
     let files: Vec<PathBuf> =
         std::env::args_os().skip(1).map(PathBuf::from).map(|p| std::path::absolute(&p).unwrap_or(p)).collect();
@@ -26,7 +28,7 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("MDEdit")
+            .with_title(APP_TITLE)
             .with_app_id("mdedit")
             .with_icon(icon())
             .with_inner_size([1000.0, 760.0]),

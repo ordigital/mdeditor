@@ -147,7 +147,7 @@ grammar_highlighting:
   offsets: 'Span ranges are UTF-8 bytes. Provisional colors are remapped only over unchanged prefix/suffix text; new/replaced bytes stay plain until the worker corrects lexical context.'
   limits: 'Code file/block with a line >262144 bytes falls back to plain text. Regex calls are not preempted internally. Whole-document TextEdit layout still costs about 28 ms for a 1 MB edit in the measured fixture.'
   performance: 'Measured on i9-13900KF, release/headless egui: 1 MB code cursor p95 about 0.25-0.29 ms, previously 28-30 ms/frame; 100 KB nested PHP edit first frame 2.7 ms and colors 4.8 ms. See report for cold costs, RSS, fixtures and caveats.'
-  binaries: 'Local release: Linux 27844800 bytes, Windows 20527104 bytes; Oniguruma linked statically (no extra runtime DLL/shared library).'
+  binaries: 'Local release: Linux 27844928 bytes, Windows 20527104 bytes; Oniguruma linked statically (no extra runtime DLL/shared library).'
   verification: '78 regular tests plus 3 ignored manual release benchmarks; fmt; Clippy -D warnings; Linux + MinGW Windows release builds. Windows runtime not tested.'
   commands: ['cargo test --release --offline --locked benchmark_ -- --ignored --nocapture --test-threads=1', 'cargo run --release --offline --locked --manifest-path tools/syntax-probe/Cargo.toml', 'cargo run --release --offline --locked --no-default-features --features onig --manifest-path tools/syntax-probe/Cargo.toml', 'cargo build --release --offline --locked --target x86_64-pc-windows-gnu']
 
@@ -195,3 +195,7 @@ release_0_1_8_validation:
   checks: '78 passed, 3 ignored manual benchmarks; fmt, diff check, Clippy -D warnings; local release build; Docker Ubuntu 22.04 AppImage; MinGW Windows ZIP.'
   integrity: 'SHA-256 sidecars verified; ZIP CRC/content and EXE equality verified; ELF max GLIBC_2.35; PE imports checked, no external Oniguruma or MinGW C++ runtime DLL.'
   limitations: 'No interactive desktop or Windows/Wine runtime tests.'
+
+version_display:
+  implementation: 'src/main.rs: APP_TITLE = concat!("MDEdit ", env!("CARGO_PKG_VERSION")); initial viewport title, App.ui dynamic title and About modal title share it.'
+  release_exception: 'User explicitly authorized replacing published v0.1.8 for this version-display fix. Move only tag v0.1.8 to the new commit using force-with-lease against the inspected remote tag; replace the four release assets and update release notes. Keep master fast-forward; do not generalize this exception to future releases.'

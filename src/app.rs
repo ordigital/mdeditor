@@ -2225,7 +2225,7 @@ impl App {
         }
 
         if self.about {
-            let r = dialog(ctx, "about_modal", &format!("{} MDEdit", t("About")), 460.0, |ui| {
+            let r = dialog(ctx, "about_modal", &format!("{} {}", t("About"), crate::APP_TITLE), 460.0, |ui| {
                 ui.label(RichText::new(t("Keyboard shortcuts")).strong().color(md::HEAD));
                 ui.add_space(6.0);
                 let max_h = (ctx.content_rect().height() * 0.55).max(200.0);
@@ -2871,8 +2871,8 @@ impl eframe::App for App {
         }
 
         let title = match self.docs.get(self.active) {
-            Some(d) => format!("{} — MDEdit", d.title(self.cfg.lang)),
-            None => "MDEdit".to_owned(),
+            Some(d) => format!("{} — {}", d.title(self.cfg.lang), crate::APP_TITLE),
+            None => crate::APP_TITLE.to_owned(),
         };
         if title != self.title {
             ctx.send_viewport_cmd(ViewportCommand::Title(title.clone()));
