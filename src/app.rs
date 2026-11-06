@@ -492,6 +492,7 @@ fn build_shortcuts() -> Vec<(Modifiers, Key, Action)> {
         (c, Key::W, Close),
         (c, Key::O, Open),
         (c, Key::N, New),
+        (c, Key::T, New),
         (cs, Key::I, Insert),
         (cs, Key::F, Files),
         (c, Key::F, Find),
@@ -574,12 +575,9 @@ fn load_image(ctx: &Context, dir: Option<&Path>, src: &str) -> Option<(TextureHa
         }
         None => decode_image(image::ImageReader::open(resolve(dir, src)?).ok()?)?,
     };
-    let img = if img.width().max(img.height()) > MAX_TEXTURE_SIDE {
-        img.thumbnail(MAX_TEXTURE_SIDE, MAX_TEXTURE_SIDE)
-    } else {
-        img
-    }
-    .into_rgba8();
+    let max_side = MAX_TEXTURE_SIDE.min(ctx.input(|i| i.max_texture_side).max(1) as u32);
+    let img =
+        if img.width().max(img.height()) > max_side { img.thumbnail(max_side, max_side) } else { img }.into_rgba8();
     let size = [img.width() as usize, img.height() as usize];
     let ci = egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw());
     let tex = ctx.load_texture(image_key(dir, src)?, ci, Default::default());
@@ -847,7 +845,8 @@ impl App {
     }
 
     /// Ends the current undo step of the active document (call around programmatic edits).
-    fn checkpoint(&mut self) {
+    fn checkpoint(&mut self, ctx: &Context) {
+        self.renumber_lists(ctx);
         let now = self.now;
         if let Some(doc) = self.docs.get_mut(self.active) {
             doc.checkpoint(now);
@@ -864,6 +863,50 @@ impl App {
         }
     }
 
+    /// Normalize changed Markdown before recording history, mapping both cursor endpoints.
+    fn renumber_lists(&mut self, ctx: &Context) {
+        let Some(doc) = self.docs.get_mut(self.active) else { return };
+        if doc.syntax.is_some() || doc.text == doc.prev {
+            return;
+        }
+        let edits = numbered_edits(&doc.text);
+        if edits.is_empty() {
+            return;
+        }
+        let id = doc.edit_id();
+        let mut state = TextEditState::load(ctx, id).unwrap_or_default();
+        let mut range = state.cursor.char_range();
+        // Translate sorted byte offsets in one pass instead of rescanning the document per item.
+        let (mut byte, mut chars) = (0, 0);
+        let edits: Vec<_> = edits
+            .into_iter()
+            .map(|(start, end, replacement)| {
+                chars += doc.text[byte..start].chars().count();
+                let a = chars;
+                chars += end - start; // Replaced number markers contain ASCII digits only.
+                byte = end;
+                (start, end, a, chars, replacement)
+            })
+            .collect();
+        for (start, end, a, b, replacement) in edits.into_iter().rev() {
+            if let Some(r) = range.as_mut() {
+                for c in [&mut r.primary, &mut r.secondary] {
+                    c.index.0 = if c.index.0 >= b {
+                        c.index.0 - (b - a) + replacement.len()
+                    } else if c.index.0 > a {
+                        a + replacement.len()
+                    } else {
+                        c.index.0
+                    };
+                }
+            }
+            doc.text.replace_range(start..end, &replacement);
+        }
+        state.cursor.set_char_range(range);
+        state.store(ctx, id);
+        ctx.request_repaint();
+    }
+
     /// Enter continues a list or quote (or ends it on an empty item); Tab / Shift+Tab indent list items.
     fn list_keys(&mut self, ctx: &Context) {
         let Some(doc) = self.docs.get(self.active) else { return };
@@ -875,7 +918,22 @@ impl App {
         let ba = char_to_byte(text, a);
         let ls = text[..ba].rfind('\n').map_or(0, |i| i + 1);
         let le = text[ba..].find('\n').map_or(text.len(), |i| ba + i);
-        let Some((prefix, next, rest)) = list_prefix(&text[ls..le]) else { return };
+        let parsed = list_prefix(&text[ls..le]).or_else(|| {
+            let line = &text[ls..le];
+            if !line.starts_with([' ', '\t']) {
+                return None;
+            }
+            text[..ls].lines().rev().take_while(|l| !l.trim().is_empty()).find_map(|l| {
+                let (prefix, next, _) = list_prefix(l)?;
+                (!next.is_empty()).then(|| (prefix, next, line.len() - line.trim_start().len()))
+            })
+        });
+        let Some((prefix, next, rest)) = parsed else { return };
+        if !next.is_empty() && ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Enter)) {
+            let marker_width = rest.saturating_sub(prefix.len()).max(next.len());
+            self.insert(ctx, &format!("\n{prefix}{}", " ".repeat(marker_width)));
+            return;
+        }
         let empty = text[ls + rest..le].trim().is_empty();
         let lsc = byte_to_char(text, ls);
         let shift_tab = !next.is_empty() && ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Tab));
@@ -892,15 +950,15 @@ impl App {
             (ls..ls, "\t".to_owned(), a + 1)
         } else if shift_tab {
             let line = &text[ls..le];
-            let n = if line.starts_with('\t') { 1 } else { line.bytes().take(4).take_while(|c| *c == b' ').count() };
+            let n = if line.starts_with('\t') { 1 } else { line.bytes().take(2).take_while(|c| *c == b' ').count() };
             (ls..ls + n, String::new(), a.saturating_sub(n).max(lsc))
         } else {
             return;
         };
-        self.checkpoint();
+        self.checkpoint(ctx);
         self.docs[self.active].text.replace_range(range, &with);
         self.set_selection(ctx, cursor, cursor);
-        self.checkpoint();
+        self.checkpoint(ctx);
     }
 
     fn primary_text(&mut self) -> Option<String> {
@@ -986,7 +1044,7 @@ impl App {
 
     /// Replaces the selection (or inserts at the cursor) with `s`.
     fn insert(&mut self, ctx: &Context, s: &str) {
-        self.checkpoint();
+        self.checkpoint(ctx);
         let Some(doc) = self.docs.get_mut(self.active) else {
             return;
         };
@@ -997,11 +1055,11 @@ impl App {
         doc.text.replace_range(ba..bb, s);
         let c = a + s.chars().count();
         self.set_selection(ctx, c, c);
-        self.checkpoint();
+        self.checkpoint(ctx);
     }
 
     fn apply_fmt(&mut self, ctx: &Context, f: Fmt) {
-        self.checkpoint();
+        self.checkpoint(ctx);
         let Some(doc) = self.docs.get(self.active) else {
             return;
         };
@@ -1056,7 +1114,7 @@ impl App {
             if lines.len() == 1 { (fix(a), fix(b)) } else { (lsc, lsc + new.chars().count()) }
         };
         self.set_selection(ctx, na, nb);
-        self.checkpoint();
+        self.checkpoint(ctx);
     }
 
     fn find_next(&mut self, ctx: &Context) {
@@ -1089,30 +1147,26 @@ impl App {
     fn replace_one(&mut self, ctx: &Context) {
         let Some(f) = &self.find else { return };
         let (q, r) = (f.query.clone(), f.replace.clone());
-        if let (Some((a, b)), Some(doc)) = (self.selection(ctx), self.docs.get_mut(self.active)) {
+        if let (Some((a, b)), Some(doc)) = (self.selection(ctx), self.docs.get(self.active)) {
             let (ba, bb) = (char_to_byte(&doc.text, a), char_to_byte(&doc.text, b));
             if !q.is_empty() && doc.text[ba..bb] == q {
-                doc.checkpoint(self.now);
-                doc.text.replace_range(ba..bb, &r);
-                doc.checkpoint(self.now);
-                let c = a + r.chars().count();
-                let id = doc.edit_id();
-                let mut st = TextEditState::load(ctx, id).unwrap_or_default();
-                st.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(c))));
-                st.store(ctx, id);
+                self.insert(ctx, &r);
             }
         }
         self.find_next(ctx);
     }
 
-    fn replace_all(&mut self) {
-        let Some(f) = &mut self.find else { return };
-        if let (false, Some(doc)) = (f.query.is_empty(), self.docs.get_mut(self.active)) {
-            doc.checkpoint(self.now);
-            doc.text = doc.text.replace(&f.query, &f.replace);
-            doc.checkpoint(self.now);
-            f.hl = None;
+    fn replace_all(&mut self, ctx: &Context) {
+        let Some(f) = &self.find else { return };
+        if f.query.is_empty() || self.docs.get(self.active).is_none() {
+            return;
         }
+        let (query, replacement) = (f.query.clone(), f.replace.clone());
+        self.checkpoint(ctx);
+        let doc = &mut self.docs[self.active];
+        doc.text = doc.text.replace(&query, &replacement);
+        self.checkpoint(ctx);
+        self.find.as_mut().unwrap().hl = None;
     }
 
     fn paste_image(&mut self, ctx: &Context) -> bool {
@@ -1473,7 +1527,7 @@ impl App {
             match a {
                 0 => self.find_next(&ctx),
                 1 => self.replace_one(&ctx),
-                2 => self.replace_all(),
+                2 => self.replace_all(&ctx),
                 _ => self.find = None,
             }
             return (None, None);
@@ -1809,7 +1863,7 @@ impl App {
                 ui.vertical_centered(|ui| {
                     ui.label("ORDIGITAL Adam Mateusz Brożyński");
                     ui.label(format!("{}: MIT", t("License")));
-                    ui.label(format!("{} Claude 5.5 (Opus/Sonnet/Haiku)", t("Code written with the help of")));
+                    ui.label(format!("{} Claude/Codex.", t("Code written with the help of")));
                 });
                 ui.add_space(16.0);
                 centered_row(ui, |ui| ui.button("OK").clicked() || enter)
@@ -2206,9 +2260,78 @@ fn list_prefix(line: &str) -> Option<(String, String, usize)> {
     let d = rest.bytes().take_while(|c| c.is_ascii_digit()).count();
     if d > 0 && matches!(rest.as_bytes().get(d), Some(b'.' | b')')) && rest.as_bytes().get(d + 1) == Some(&b' ') {
         let n: u64 = rest[..d].parse().ok()?;
-        return Some((prefix, format!("{}{} ", n + 1, &rest[d..d + 1]), i + ws + d + 2));
+        return Some((prefix, format!("{}{} ", n.saturating_add(1), &rest[d..d + 1]), i + ws + d + 2));
     }
     quoted.then(|| (line[..i].to_owned(), String::new(), i))
+}
+
+/// Byte replacements for sibling numbering; child lists keep independent counters.
+fn numbered_edits(text: &str) -> Vec<(usize, usize, String)> {
+    let mut edits = vec![];
+    let mut stack: Vec<(String, char, u64)> = vec![];
+    let mut offset = 0;
+    let mut fence: Option<(u8, usize)> = None;
+    let mut front = text.starts_with("---\n");
+    for (li, raw) in text.split_inclusive('\n').enumerate() {
+        let line = raw.trim_end_matches(['\n', '\r']);
+        let t = line.trim_start();
+        let run = t.bytes().take_while(|b| Some(b) == t.as_bytes().first()).count();
+        if front {
+            if li > 0 && matches!(t, "---" | "...") {
+                front = false;
+            }
+            offset += raw.len();
+            continue;
+        }
+        if let Some((ch, count)) = fence {
+            if t.as_bytes().first() == Some(&ch) && run >= count && t[run..].trim().is_empty() {
+                fence = None;
+            }
+            offset += raw.len();
+            continue;
+        }
+        if run >= 3 && matches!(t.as_bytes().first(), Some(b'`' | b'~')) {
+            fence = Some((t.as_bytes()[0], run));
+            stack.clear();
+        } else if let Some((prefix, next, _rest)) = list_prefix(line) {
+            if !next.is_empty() {
+                // Match visual indentation, including mixed tabs/spaces produced by Tab.
+                let key = prefix.replace('\t', "  ");
+                while stack.last().is_some_and(|(p, _, _)| p != &key && !key.starts_with(p.as_str())) {
+                    stack.pop();
+                }
+                let body = &line[prefix.len()..];
+                let digits = body.bytes().take_while(u8::is_ascii_digit).count();
+                if digits > 0 {
+                    let delim = body.as_bytes()[digits] as char;
+                    let number = body[..digits].parse::<u64>().unwrap_or(1);
+                    let expected = match stack.last_mut() {
+                        Some((p, d, n)) if *p == key && *d == delim => {
+                            *n = n.saturating_add(1);
+                            *n
+                        }
+                        _ => {
+                            // A new nested list starts at one, including after deleting its first item.
+                            let start = if key.starts_with(' ') || key.contains("  ") { 1 } else { number };
+                            stack.push((key.clone(), delim, start));
+                            start
+                        }
+                    };
+                    if number != expected {
+                        edits.push((offset + prefix.len(), offset + prefix.len() + digits, expected.to_string()));
+                    }
+                } else {
+                    stack.retain(|(p, _, _)| p != &key);
+                }
+            } else {
+                stack.clear();
+            }
+        } else if !t.is_empty() && !line.starts_with([' ', '\t']) {
+            stack.clear();
+        }
+        offset += raw.len();
+    }
+    edits
 }
 
 /// Toggles a line-level markdown prefix on a single line.
@@ -2343,6 +2466,7 @@ impl eframe::App for App {
             self.run(&ctx, a);
         }
 
+        self.renumber_lists(&ctx);
         let now = self.now;
         if let Some(doc) = self.docs.get_mut(self.active)
             && doc.record(now)
@@ -2396,8 +2520,40 @@ mod tests {
     }
 
     #[test]
+    fn replacement_keeps_numbering_and_undo_together() {
+        for all in [false, true] {
+            let text = "1. one\n2. remove\n3. three";
+            let (mut app, ctx) = app_with(text);
+            frame(&mut app, &ctx, vec![]);
+            app.run(&ctx, Action::Find);
+            let f = app.find.as_mut().unwrap();
+            f.query = "2. remove\n".into();
+            f.replace = String::new();
+            app.set_selection(&ctx, 7, 17);
+            if all {
+                app.replace_all(&ctx);
+            } else {
+                app.replace_one(&ctx);
+            }
+            assert_eq!(app.docs[0].text, "1. one\n2. three");
+            app.undo_redo(&ctx, false);
+            assert_eq!(app.docs[0].text, text);
+        }
+    }
+
+    #[test]
+    fn shift_tab_reverses_one_rendered_indentation_level() {
+        let (mut app, ctx) = app_with("    - child");
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 11, 11);
+        frame(&mut app, &ctx, vec![key(Key::Tab, Modifiers::SHIFT)]);
+        assert_eq!(app.docs[0].text, "  - child");
+    }
+
+    #[test]
     fn huge_images_are_scaled_to_fit_a_texture_and_absurd_ones_refused() {
         let ctx = Context::default();
+        ctx.run_ui(RawInput { max_texture_side: Some(1024), ..Default::default() }, |_| {}).textures_delta.clear();
         let encode = |w, h| {
             let mut png = Vec::new();
             image::DynamicImage::new_rgb8(w, h)
@@ -2406,8 +2562,9 @@ mod tests {
             format!("data:image/png;base64,{}", base64::encode(&png))
         };
         let (_, size) = load_image(&ctx, None, &encode(9000, 30)).expect("a wide image loads");
-        assert!(size.x <= MAX_TEXTURE_SIDE as f32 && size.x > 0.0 && size.y >= 1.0);
+        assert!(size.x <= 1024.0 && size.x > 0.0 && size.y >= 1.0);
         assert!(load_image(&ctx, None, &encode(20_000, 4)).is_none(), "wider than the decoder limit");
+        ctx.run_ui(RawInput::default(), |_| {}).textures_delta.clear();
     }
 
     #[test]
@@ -2462,7 +2619,7 @@ mod tests {
             ..Default::default()
         };
         let mut f = eframe::Frame::_new_kittest();
-        let _ = ctx.run_ui(input, |ui| app.ui(ui, &mut f));
+        ctx.run_ui(input, |ui| app.ui(ui, &mut f)).textures_delta.clear();
     }
 
     fn frame_at(app: &mut App, ctx: &Context, time: f64, events: Vec<Event>) {
@@ -2473,7 +2630,7 @@ mod tests {
             ..Default::default()
         };
         let mut f = eframe::Frame::_new_kittest();
-        let _ = ctx.run_ui(input, |ui| app.ui(ui, &mut f));
+        ctx.run_ui(input, |ui| app.ui(ui, &mut f)).textures_delta.clear();
     }
 
     #[test]
@@ -2554,6 +2711,120 @@ mod tests {
         assert_eq!(app.docs[0].text, "- one\n- ");
         frame(&mut app, &ctx, vec![key(Key::Enter, Modifiers::NONE)]);
         assert_eq!(app.docs[0].text, "- one\n");
+    }
+
+    #[test]
+    fn shift_enter_continues_text_and_enter_starts_next_item() {
+        for marker in ["- ", "1. "] {
+            let text = format!("{marker}żółw");
+            let (mut app, ctx) = app_with(&text);
+            frame(&mut app, &ctx, vec![]);
+            let end = text.chars().count();
+            app.set_selection(&ctx, end, end);
+            frame(&mut app, &ctx, vec![key(Key::Enter, Modifiers::SHIFT)]);
+            assert_eq!(app.docs[0].text, format!("{text}\n{}", " ".repeat(marker.len())));
+            frame(&mut app, &ctx, vec![Event::Text("ciąg dalszy".into())]);
+            frame(&mut app, &ctx, vec![key(Key::Enter, Modifiers::NONE)]);
+            assert!(app.docs[0].text.ends_with(if marker == "- " { "\n- " } else { "\n2. " }));
+        }
+    }
+
+    #[test]
+    fn tab_nests_items_and_numbering_maps_unicode_cursor() {
+        let (mut app, ctx) = app_with("9. żółw\n10. kot");
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 15, 15);
+        app.docs[0].text = "9. żółw\n9. kot".into();
+        app.set_selection(&ctx, 14, 14);
+        frame(&mut app, &ctx, vec![Event::Text("y".into())]);
+        assert_eq!(app.docs[0].text, "9. żółw\n10. koty");
+        assert_eq!(app.selection(&ctx), Some((16, 16)));
+        frame(&mut app, &ctx, vec![key(Key::Tab, Modifiers::NONE)]);
+        assert_eq!(app.docs[0].text, "9. żółw\n\t1. koty");
+        frame(&mut app, &ctx, vec![key(Key::Tab, Modifiers::SHIFT)]);
+        assert_eq!(app.docs[0].text, "9. żółw\n10. koty");
+    }
+
+    #[test]
+    fn both_new_tab_shortcuts_work() {
+        let (mut app, ctx) = app_with("text");
+        frame(&mut app, &ctx, vec![]);
+        for k in [Key::N, Key::T] {
+            let count = app.docs.len();
+            frame(&mut app, &ctx, vec![key(k, Modifiers::COMMAND)]);
+            assert_eq!(app.docs.len(), count + 1);
+            assert!(app.docs[app.active].text.is_empty());
+        }
+    }
+
+    #[test]
+    fn nested_numbering_handles_mixed_indentation_and_first_item_deletion() {
+        let text = "1. parent\n\t1. child\n\t\t2. remaining\n    4. last\n\t2. sibling\n  \t1. new children\n\t\t8. next child\n2. parent\n\t3. new list";
+        let mut normalized = text.to_owned();
+        for (a, b, with) in numbered_edits(text).into_iter().rev() {
+            normalized.replace_range(a..b, &with);
+        }
+        assert_eq!(
+            normalized,
+            "1. parent\n\t1. child\n\t\t1. remaining\n    2. last\n\t2. sibling\n  \t1. new children\n\t\t2. next child\n2. parent\n\t1. new list"
+        );
+        assert!(numbered_edits(&normalized).is_empty());
+    }
+
+    #[test]
+    fn deleting_items_at_second_nested_level_renumbers_in_editor() {
+        let text = "1. parent\n\t1. child\n\t\t1. first\n\t\t2. middle\n\t\t3. last";
+        for deleted in ["\t\t1. first\n", "\t\t2. middle\n"] {
+            let (mut app, ctx) = app_with(text);
+            frame(&mut app, &ctx, vec![]);
+            let a = text.find(deleted).unwrap();
+            app.set_selection(&ctx, a, a + deleted.len());
+            frame(&mut app, &ctx, vec![key(Key::Backspace, Modifiers::NONE)]);
+            let expected = if deleted.contains("first") {
+                "1. parent\n\t1. child\n\t\t1. middle\n\t\t2. last"
+            } else {
+                "1. parent\n\t1. child\n\t\t1. first\n\t\t2. last"
+            };
+            assert_eq!(app.docs[0].text, expected);
+        }
+    }
+
+    #[test]
+    fn numbering_tracks_siblings_and_preserves_code_and_starts() {
+        let text = "3. a\n8. b\n  1. child\n  9. child\n7. c\n\nparagraph\n\n5) other\n9) next\n```md\n1. code\n9. code\n```\n";
+        let mut normalized = text.to_owned();
+        for (a, b, with) in numbered_edits(text).into_iter().rev() {
+            normalized.replace_range(a..b, &with);
+        }
+        assert_eq!(
+            normalized,
+            "3. a\n4. b\n  1. child\n  2. child\n5. c\n\nparagraph\n\n5) other\n6) next\n```md\n1. code\n9. code\n```\n"
+        );
+        assert!(numbered_edits(&normalized).is_empty());
+    }
+
+    #[test]
+    fn inserting_and_deleting_numbered_items_updates_following_numbers() {
+        let (mut app, ctx) = app_with("1. one\n2. two\n3. three");
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 6, 6);
+        frame(&mut app, &ctx, vec![key(Key::Enter, Modifiers::NONE)]);
+        assert_eq!(app.docs[0].text, "1. one\n2. \n3. two\n4. three");
+        app.set_selection(&ctx, 7, 11);
+        frame(&mut app, &ctx, vec![key(Key::Backspace, Modifiers::NONE)]);
+        assert_eq!(app.docs[0].text, "1. one\n2. two\n3. three");
+        frame(&mut app, &ctx, vec![key(Key::Z, Modifiers::COMMAND)]);
+        assert!(app.docs[0].text.contains("4. three"));
+    }
+
+    #[test]
+    fn empty_bullet_height_and_continuation_indent_are_stable() {
+        let (empty, _) = layout("- ", None, 400.0);
+        let (filled, _) = layout("- text", None, 400.0);
+        assert!((empty.rows[0].height() - filled.rows[0].height()).abs() < 1.0);
+        let (g, _) = layout("- text\n  continuation\n  - child", None, 400.0);
+        assert!((g.rows[1].pos.x - LOOK.indent()).abs() < 1.0);
+        assert!(g.rows[2].pos.x > g.rows[0].pos.x);
     }
 
     #[test]
@@ -2639,7 +2910,7 @@ mod tests {
         app.replace_one(&ctx);
         assert_eq!(app.docs[0].text, "cow dog cat");
         assert_eq!(app.selection(&ctx), Some((8, 11)));
-        app.replace_all();
+        app.replace_all(&ctx);
         assert_eq!(app.docs[0].text, "cow dog cow");
     }
 
@@ -2648,7 +2919,7 @@ mod tests {
     fn layout(text: &str, cursor: Option<usize>, wrap: f32) -> (Arc<Galley>, Vec<Deco>) {
         let ctx = Context::default();
         fonts::apply(&ctx, "", 200, 400, Lang::English);
-        let _ = ctx.run_ui(RawInput::default(), |_| {});
+        ctx.run_ui(RawInput::default(), |_| {}).textures_delta.clear();
         let mut layout = |job| ctx.fonts_mut(|f| f.layout_job(job));
         md::build(text, cursor, wrap, &LOOK, 1.0, &mut |_| None, &mut layout)
     }
@@ -2705,7 +2976,7 @@ mod tests {
         ];
         let ctx = Context::default();
         fonts::apply(&ctx, "", 300, 600, Lang::English);
-        let _ = ctx.run_ui(RawInput::default(), |_| {});
+        ctx.run_ui(RawInput::default(), |_| {}).textures_delta.clear();
         let mut layout = |job| ctx.fonts_mut(|f| f.layout_job(job));
         let mut seed = 0x2545_f491_4f6c_dd1du64;
         let mut next = move || {

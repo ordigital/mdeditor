@@ -1,0 +1,83 @@
+schema: 1
+project: {name: MDEdit, language: Rust, edition: 2024, rust: '1.95', ui: 'eframe/egui 0.36'}
+entry: src/main.rs
+navigation:
+  src/main.rs: [main, single_instance, icon]
+  src/app.rs:
+    responsibilities: [application_state, tabs, editor_input, undo_redo, dialogs, settings, clipboard, decorations]
+    list_input: [list_keys, list_prefix, toggle_line]
+    cursor: [selection, set_selection, insert, char_to_byte, byte_to_char]
+    history: [Doc.record, Doc.checkpoint, Doc.step]
+    tests: 'inline cfg(test); app_with/frame simulate egui frames without a window'
+  src/md.rs:
+    responsibilities: [markdown_classification, paragraph_layout, inline_styles, decorations]
+    symbols: [build, line, inline, fmt, Look, Deco, Kind]
+  src/highlight.rs: config_file_syntax_coloring
+  src/latex.rs: latex_to_unicode
+  src/files.rs: file_browser
+  src/fonts.rs: embedded_and_system_fonts
+  src/i18n.rs: translated_ui_strings
+  src/base64.rs: embedded_image_codec
+assets: {assets: embedded_fonts_and_icons, examples: sample_markdown, packaging: desktop_installers, releases: packaged_binaries}
+invariants:
+  - 'Text is UTF-8; egui cursors count characters, replace_range uses bytes.'
+  - 'Markdown is edited directly in TextEdit; src/md.rs supplies a cached galley and decorations.'
+  - 'Programmatic edits use checkpoints; preserve selection and undo grouping.'
+  - 'Config files use highlight instead of Markdown; do not apply Markdown editing rules there.'
+  - 'Renderer lays out paragraphs separately and combines galleys to preserve hanging indents.'
+verification:
+  format: cargo fmt --check
+  tests: cargo test --offline
+  release: cargo build --release --offline
+list_editing:
+  implementation: {input: 'src/app.rs:list_keys', numbering: 'src/app.rs:numbered_edits + App.renumber_lists', layout: 'src/md.rs:line'}
+  keys:
+    Enter: 'next sibling; empty item exits list'
+    Shift+Enter: 'newline with spaces matching marker width, no new marker; Enter on continuation starts next sibling'
+    Tab: 'indent item with a tab; nested lists render one level farther right'
+    Shift+Tab: 'remove leading tab or up to two spaces (one rendered level)'
+  numbering:
+    trigger: 'changed Markdown before checkpoints and end-of-frame history recording'
+    rules: 'preserve first number at root; increment siblings; independent counters per visual indentation and delimiter; tabs equal two spaces; new nested lists start at one; ignore fenced code and initial YAML front matter'
+    cursor: 'map both character endpoints through byte-based digit replacements'
+    history: 'renumber together with edit; unchanged/opened documents and undo/redo snapshots remain untouched'
+  layout: 'indented continuation text gets a hanging indent; empty marker gets normal line height'
+  regression_tests:
+    - shift_enter_continues_text_and_enter_starts_next_item
+    - both_new_tab_shortcuts_work
+    - nested_numbering_handles_mixed_indentation_and_first_item_deletion
+    - deleting_items_at_second_nested_level_renumbers_in_editor
+    - tab_nests_items_and_numbering_maps_unicode_cursor
+    - numbering_tracks_siblings_and_preserves_code_and_starts
+    - inserting_and_deleting_numbered_items_updates_following_numbers
+    - empty_bullet_height_and_continuation_indent_are_stable
+  test_harness: 'egui headless run_ui outputs must clear textures_delta; texture tests declare max_texture_side'
+last_verification: {tests: 46, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
+deployment:
+  desktop_launcher: /home/adam/.local/share/applications/mdedit.desktop
+  executable: target/release/mdedit
+  path_alias: /10tb/apps/MDEditor
+  workflow: "After user-facing changes run cargo build --release --offline; cargo test builds only test executables. Restart all editor windows to use the new binary (single instance)."
+shortcuts: {new_tab: [Ctrl+N, Ctrl+T], source: "src/app.rs:shortcuts; about_rows derives its labels from this table"}
+review_fixes:
+  about: 'src/app.rs:modals uses translated Code written with the help of + Claude/Codex.; shared by all 23 languages'
+  images: 'load_image caps image dimensions to min(MAX_TEXTURE_SIDE, egui device max_texture_side); regression test declares 1024px device limit'
+  numbering_performance: 'renumber_lists converts sorted digit byte offsets to character offsets in one forward pass'
+  replacement: 'replace_one uses insert; replace_all uses App.checkpoint so normalization and replacement share undo history'
+  tests: [replacement_keeps_numbering_and_undo_together, shift_tab_reverses_one_rendered_indentation_level]
+release_workflow:
+  current_version: 0.1.6
+  repository: ordigital/mdeditor
+  branch: master
+  tag: v0.1.6
+  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.6
+  instructions: packaging/RELEASING.md
+  notes: packaging/release-notes-0.1.6.md
+  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.6-x86_64.AppImage}
+  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.6-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE]}
+  checksums: 'Both packages have basename.sha256 sidecars with relative filenames; verify from releases/.'
+  publication: 'Annotated v<version> tag; atomic push of master and tag; gh release create --verify-tag --notes-file with two packages and two SHA-256 files.'
+  caches: [releases/build/target, 'Docker volume mdedit-cargo', 'Docker volume mdedit-rustup']
+  requirements: 'Docker daemon running and socket accessible, appimagetool, MinGW-w64, Rust Windows GNU target, Python >=3.11, gh authentication, GitHub SSH access.'
+  validation: '46 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.6.'
+  git_policy: 'releases/ is ignored; commit source/index/scripts/notes and version bump, upload binaries as GitHub release assets; never force-push existing tags.'

@@ -609,7 +609,7 @@ mod tests {
         ];
         let ctx = eframe::egui::Context::default();
         crate::fonts::apply(&ctx, "", 300, 600, crate::i18n::Lang::English);
-        let _ = ctx.run_ui(eframe::egui::RawInput::default(), |_| {});
+        ctx.run_ui(eframe::egui::RawInput::default(), |_| {}).textures_delta.clear();
         let look = Look { size: 16.0, line_height: 1.5, weight: 300, bold_weight: 600, code_weight: 400 };
         let mut layout = |job| ctx.fonts_mut(|f| f.layout_job(job));
         let mut seed = 0x1234_5678_9abc_def1u64;

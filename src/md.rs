@@ -703,6 +703,10 @@ fn line(cx: &mut Cx, content: &str, rev: bool, st: &mut [St], byte0: usize, ci0:
                 st[j..j + d + 2].fill(St { dim: true, ..base });
                 i = j + d + 2;
                 level += nest as f32 + 1.0;
+            } else if spaces > 0 {
+                st[i..j].fill(hidden);
+                i = j;
+                level += nest as f32;
             } else if content[j..].starts_with("[^")
                 && let Some(close) = content[j..].find("]:")
             {
@@ -720,6 +724,10 @@ fn line(cx: &mut Cx, content: &str, rev: bool, st: &mut [St], byte0: usize, ci0:
         }
     }
     let hang = (level > 0.0).then_some((level * cx.look.indent(), i));
+    if i == n && i > 0 {
+        // Keep an empty item as tall as an item containing text.
+        st[i - 1] = St { lh: (cx.look.size * cx.look.line_height).round() as u16, ..st[i - 1] };
+    }
     st[i..n].fill(base);
     inline(cx, content, i, rev, st, ci0);
     hang

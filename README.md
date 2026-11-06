@@ -10,7 +10,7 @@ Polish version: [README.pl.md](README.pl.md).
 
 - **Live preview** of headings, bold, italic, strikethrough, `==highlight==`, inline code and code
   blocks, links, `[[wiki links]]`, `#tags`, footnotes, `%%comments%%`, horizontal rules, front matter.
-- **Lists and tasks** with hanging indents, clickable checkboxes, Enter continues a list, Tab / Shift+Tab indent.
+- **Lists and tasks** with hanging indents, clickable checkboxes, automatic numbering, Enter continues a list, Shift+Enter continues text within an item, Tab / Shift+Tab indent nested lists.
 - **Quotes and callouts** (`> [!note]`, `tip`, `warning`, `danger`, `question`, …), **tables** with column alignment.
 - **Formulas**: `$…$`, `\(…\)`, `$$…$$`, `\[…\]`, including `\boxed{}` and `\text{}`, rendered as Unicode.
 - **Images**: from files, embedded as `data:` base64, `![[embeds]]`, `![alt|300](…)` widths.
@@ -53,7 +53,7 @@ installs `mdedit.desktop` and the icon for the current user. On Wayland the task
 
 | Action | Keys |
 | --- | --- |
-| New / Open / Save / Save as | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
+| New / Open / Save / Save as | Ctrl+N (Ctrl+T) / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
 | Save all | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S on macOS)¹ |
 | Close / Close all / Exit | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |
 | Undo / Redo | Ctrl+Z / Ctrl+Y, Ctrl+Shift+Z |
@@ -69,6 +69,7 @@ installs `mdedit.desktop` and the icon for the current user. On Wayland the task
 | Bullet list / Task / Quote | Ctrl+Shift+L / Ctrl+L / Ctrl+Shift+Q |
 | Open link or jump to footnote | Ctrl+click |
 | Change font size | Ctrl+scroll |
+| New list item / line within item | Enter / Shift+Enter |
 | Indent list item | Tab / Shift+Tab |
 
 ¹ egui does not report the Super/Meta key on Linux and Windows, so Alt stands in for it.
@@ -99,7 +100,7 @@ Settings are stored in `~/.config/mdedit/config`, recent files in `~/.config/mde
 
 MIT, see [LICENSE](LICENSE). Created by ORDIGITAL Adam Mateusz Brożyński.
 
-Code written with the help of Claude 5.5 (Opus/Sonnet/Haiku).
+Code written with the help of Claude/Codex.
 
 Fonts: [Inter](https://github.com/rsms/inter) and [Source Code Pro](https://github.com/adobe-fonts/source-code-pro),
 both under the SIL Open Font License 1.1 (see `assets/`). Colors and proportions follow the default dark theme of Obsidian; this project is not affiliated with Obsidian.

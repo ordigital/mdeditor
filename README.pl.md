@@ -7,7 +7,7 @@ Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyc
 ## Funkcje
 
 - **Podgląd na żywo** nagłówków, pogrubienia, kursywy, przekreślenia, `==wyróżnienia==`, kodu w linii i bloków kodu, linków, `[[linków wiki]]`, `#tagów`, przypisów, `%%komentarzy%%`, linii poziomych i nagłówka YAML.
-- **Listy i zadania** z wiszącym wcięciem, klikalne pola wyboru. Enter dodaje kolejny punkt listy, Tab i Shift+Tab zmieniają wcięcie.
+- **Listy i zadania** z wiszącym wcięciem, klikalne pola wyboru. Numeracja aktualizuje się automatycznie. Enter dodaje kolejny punkt, Shift+Enter nową linię w tym samym punkcie, a Tab i Shift+Tab zmieniają poziom zagnieżdżenia.
 - **Cytaty i callouty** (`> [!note]`, `tip`, `warning`, `danger`, `question` itd.) oraz **tabele** z wyrównaniem kolumn. Długi tekst w komórkach zawija się do nowych linii.
 - **Wzory**: `$…$`, `\(…\)`, `$$…$$`, `\[…\]`, także `\boxed{}` i `\text{}`, wyświetlane jako Unicode.
 - **Obrazy**: z plików, osadzone jako base64 `data:`, `![[embedy]]` i szerokości `![alt|300](…)`. Ctrl+V z obrazem w schowku osadza go jako JPEG (85%, maks. 1200 px szerokości) albo zapisuje WebP obok dokumentu.
@@ -48,7 +48,7 @@ instaluje dla bieżącego użytkownika `mdedit.desktop` i ikonę. Na Wayland iko
 
 | Akcja | Klawisze |
 | --- | --- |
-| Nowy / Otwórz / Zapisz / Zapisz jako | Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
+| Nowy / Otwórz / Zapisz / Zapisz jako | Ctrl+N (Ctrl+T) / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
 | Zapisz wszystko | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S na macOS)¹ |
 | Zamknij / Zamknij wszystko / Wyjście | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |
 | Cofnij / Ponów | Ctrl+Z / Ctrl+Y, Ctrl+Shift+Z |
@@ -64,6 +64,7 @@ instaluje dla bieżącego użytkownika `mdedit.desktop` i ikonę. Na Wayland iko
 | Lista punktowana / zadanie / cytat | Ctrl+Shift+L / Ctrl+L / Ctrl+Shift+Q |
 | Otwórz link lub przejdź do przypisu | Ctrl+klik |
 | Zmiana rozmiaru czcionki | Ctrl+kółko myszy |
+| Nowy punkt / linia w punkcie | Enter / Shift+Enter |
 | Wcięcie punktu listy | Tab / Shift+Tab |
 
 ¹ egui nie raportuje klawisza Super/Meta w Linuksie i Windows, dlatego zamiast niego używany jest Alt.
@@ -91,6 +92,6 @@ Ustawienia są w `~/.config/mdedit/config`, ostatnie pliki w `~/.config/mdedit/r
 
 MIT, zob. [LICENSE](LICENSE). Autor: ORDIGITAL Adam Mateusz Brożyński.
 
-Kod napisany z pomocą Claude 5.5 (Opus/Sonnet/Haiku).
+Kod napisany z pomocą Claude/Codex.
 
 Czcionki: [Inter](https://github.com/rsms/inter) i [Source Code Pro](https://github.com/adobe-fonts/source-code-pro), obie na licencji SIL Open Font License 1.1 (zob. `assets/`). Kolory i proporcje są zgodne z domyślnym ciemnym motywem Obsidiana; projekt nie jest powiązany z Obsidianem.
