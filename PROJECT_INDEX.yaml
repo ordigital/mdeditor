@@ -77,20 +77,20 @@ review_fixes:
   replacement: 'replace_one uses insert; replace_all uses App.checkpoint so normalization and replacement share undo history'
   tests: [replacement_keeps_numbering_and_undo_together, shift_tab_reverses_one_rendered_indentation_level]
 release_workflow:
-  current_version: 0.1.10
+  current_version: 0.1.11
   repository: ordigital/mdeditor
   branch: master
-  tag: v0.1.10
-  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.10
+  tag: v0.1.11
+  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.11
   instructions: packaging/RELEASING.md
-  notes: packaging/release-notes-0.1.10.md
-  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.10-x86_64.AppImage}
-  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.10-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE, licenses/]}
+  notes: packaging/release-notes-0.1.11.md
+  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.11-x86_64.AppImage}
+  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.11-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE, licenses/]}
   checksums: 'Both packages have basename.sha256 sidecars with relative filenames; verify from releases/.'
   publication: 'Annotated v<version> tag; atomic push of master and tag; gh release create --verify-tag --notes-file with two packages and two SHA-256 files.'
   caches: [releases/build/target, 'Docker volume mdedit-cargo', 'Docker volume mdedit-rustup']
   requirements: 'Docker daemon running and socket accessible, appimagetool, MinGW-w64, Rust Windows GNU target, Python >=3.11, gh authentication, GitHub SSH access.'
-  validation: '90 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.10.'
+  validation: '90 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.11.'
   git_policy: 'releases/ is ignored; commit source/index/scripts/notes and version bump, upload binaries as GitHub release assets; never force-push existing tags.'
 linked_pages_and_toolbar:
   status: 'Included in release v0.1.7.'
@@ -225,8 +225,8 @@ ctrl_click_navigation:
   release_exception: 'User explicitly authorized folding this fix into the preceding commit/push and replacing published v0.1.9. Amend only the latest release commit, move v0.1.9, push master/tag atomically with explicit force-with-lease against inspected remote refs, then replace four assets and notes. This exception does not authorize future history rewrites.'
 
 coffee_link:
-  implementation: 'src/app.rs: COFFEE_LABEL/COFFEE_URL, App.status_bar/document_status and About modal; README.md/README.pl.md'
-  behavior: 'Show the exact label ♡ Buy me a coffee in every language, linking to https://buymeacoffee.com/adamstrad. Right-aligned in the status bar, including when there is no document; at the very bottom of About below OK; also near the top of both English and Polish README files.'
+  implementation: 'src/app.rs: COFFEE_LABEL/COFFEE_URL/COFFEE_COLOR, App.status_bar/document_status and About modal; README.md/README.pl.md'
+  behavior: 'Show the exact label ♡ Buy me a coffee in every language, linking to https://buymeacoffee.com/adamstrad. Right-aligned in the status bar, including when there is no document; at the very bottom of About; both app placements use the shared light pink COFFEE_COLOR (#f0a0cd) for contrast on dark backgrounds; also near the top of both English and Polish README files.'
   release_exception: 'User explicitly authorized adding this link to the preceding commit/push and replacing v0.1.9 again. Amend latest release commit, move only v0.1.9 and atomically push master/tag with explicit force-with-lease against inspected refs; replace four assets and notes.'
 
 printing_and_pdf:
@@ -266,3 +266,20 @@ release_0_1_10_validation:
   artifacts: {appimage_bytes: 23878136, windows_zip_bytes: 21294830}
   integrity: 'Both SHA-256 sidecars verified; ZIP CRC/content and archived EXE equality verified; bundled font/data licenses verified in both packages; ELF max GLIBC_2.35; PE imports contain system DLLs only.'
   limitations: 'Native printing, interactive desktop and Windows/Wine runtime not tested.'
+
+editor_background:
+  implementation: 'src/app.rs: editor_background called inside App.editor ScrollArea before content painting'
+  rendering: 'One deterministic 128x128 HSV noise texture cached per egui context, nearest repeat sampling; HsvaGamma preserves the original dark md.BG in sRGB space, with subtle hue/saturation variation and approximately +/-2 sRGB levels of value; avoid linear Hsva with an sRGB value, which brightens the background. One clipped image covers the viewport, including space below short documents. UV coordinates follow the scroll content origin so grain scrolls with text. No image asset, dependency, per-frame generation or animation.'
+  scope: 'Editor document surface only; Markdown and source files share it. No changes to PDF/printing, document text or UI translations.'
+
+dialog_and_menu_contrast:
+  implementation: 'src/app.rs: dialog_with_title_close, App.modals/menu_bar/status_bar'
+  about: 'No OK button; title bar has a right-aligned frameless × matching the file browser close button. Escape/outside dismissal remains handled by Modal.should_close. Other dialogs retain their existing controls.'
+  menus: 'Selected Syntax and View width labels explicitly use white text; existing translations, selection backgrounds and actions are retained.'
+
+release_0_1_11_validation:
+  review: 'Reviewed changes since v0.1.10: scrolling HSV texture cache/color space, modal title close propagation, selected menu text contrast and shared coffee color. No remaining issues or obsolete code found.'
+  checks: '90 passed, 3 manual benchmarks ignored; fmt, diff check, Clippy -D warnings; fresh local release build; Docker Ubuntu 22.04 AppImage; MinGW Windows ZIP.'
+  artifacts: {appimage_bytes: 23861752, windows_zip_bytes: 21301246}
+  integrity: 'Both SHA-256 sidecars verified; ZIP CRC/content and archived EXE equality verified; bundled licenses verified in both packages; ELF max GLIBC_2.35; PE system DLL imports checked.'
+  limitations: 'Interactive desktop and Windows/Wine runtime not tested.'

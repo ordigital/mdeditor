@@ -42,6 +42,7 @@ const TITLE_SCALE: f32 = 1.618;
 /// Obsidian's `--background-secondary` (menu, tabs, dialogs) and a lighter status bar.
 const CHROME: Color32 = Color32::from_rgb(0x26, 0x26, 0x26);
 const COFFEE_LABEL: &str = "♡ Buy me a coffee";
+const COFFEE_COLOR: Color32 = Color32::from_rgb(0xf0, 0xa0, 0xcd);
 const COFFEE_URL: &str = "https://buymeacoffee.com/adamstrad";
 const STATUS: Color32 = Color32::from_rgb(0x2e, 0x2e, 0x2e);
 
@@ -141,6 +142,46 @@ struct NewPage {
     dir: PathBuf,
     focus: bool,
     error: Option<String>,
+}
+
+/// A cached HSV grain tile follows the scroll content origin, including empty space.
+fn editor_background(ui: &Ui) {
+    const SIDE: usize = 128;
+    let id = Id::new("editor_noise");
+    let cached = ui.ctx().data(|data| data.get_temp::<TextureHandle>(id));
+    let texture = cached.unwrap_or_else(|| {
+        let mut seed = 0x6d64_6564_u32;
+        let mut random = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed as f32 / u32::MAX as f32
+        };
+        let pixels = (0..SIDE * SIDE)
+            .map(|_| {
+                Color32::from(egui::ecolor::HsvaGamma {
+                    h: random(),
+                    s: random() * 0.035,
+                    v: md::BG.r() as f32 / 255.0 + (random() - 0.5) * 0.018,
+                    a: 1.0,
+                })
+            })
+            .collect();
+        let texture = ui.ctx().load_texture(
+            "editor_noise",
+            egui::ColorImage::new([SIDE, SIDE], pixels),
+            egui::TextureOptions::NEAREST_REPEAT,
+        );
+        ui.ctx().data_mut(|data| data.insert_temp(id, texture.clone()));
+        texture
+    });
+    let rect = ui.clip_rect();
+    let origin = ui.max_rect().min;
+    let uv = Rect::from_min_max(
+        ((rect.min - origin) / SIDE as f32).to_pos2(),
+        ((rect.max - origin) / SIDE as f32).to_pos2(),
+    );
+    ui.painter().image(texture.id(), rect, uv, Color32::WHITE);
 }
 
 /// All formatting buttons share the existing editor actions and translated labels.
@@ -2148,7 +2189,9 @@ impl App {
             ui.menu_button(t("View"), |ui| {
                 ui.menu_button(format!("{} ({})", t("View width"), label(Action::CycleWidth)), |ui| {
                     for (index, name) in VIEW_WIDTHS.iter().enumerate() {
-                        if ui.selectable_value(&mut self.cfg.view_width, index as u8, t(name)).clicked() {
+                        let text = RichText::new(t(name));
+                        let text = if self.cfg.view_width == index as u8 { text.color(Color32::WHITE) } else { text };
+                        if ui.selectable_value(&mut self.cfg.view_width, index as u8, text).clicked() {
                             ui.close();
                         }
                     }
@@ -2162,7 +2205,9 @@ impl App {
                     let Some(doc) = self.docs.get_mut(self.active) else { return };
                     let mut mode = doc.syntax_mode;
                     let mut option = |ui: &mut Ui, value, name: &str| {
-                        if ui.selectable_value(&mut mode, value, name).clicked() {
+                        let text = RichText::new(name);
+                        let text = if mode == value { text.color(Color32::WHITE) } else { text };
+                        if ui.selectable_value(&mut mode, value, text).clicked() {
                             ui.close();
                         }
                     };
@@ -2323,6 +2368,7 @@ impl App {
         }
         let mut drag_scroll = 0.0;
         let out = area.show(ui, |ui| {
+            editor_background(ui);
             ui.horizontal_top(|ui| {
                 ui.add_space(left);
                 ui.vertical(|ui| {
@@ -2757,41 +2803,45 @@ impl App {
         }
 
         if self.about {
-            let r = dialog(ctx, "about_modal", &format!("{} {}", t("About"), crate::APP_TITLE), 460.0, |ui| {
-                ui.label(RichText::new(t("Keyboard shortcuts")).strong().color(md::HEAD));
-                ui.add_space(6.0);
-                let max_h = (ctx.content_rect().height() * 0.55).max(200.0);
-                egui::ScrollArea::vertical()
-                    .max_height(max_h)
-                    .auto_shrink([false, true])
-                    .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
-                    .show(ui, |ui| {
-                        egui::Grid::new("shortcuts").num_columns(3).spacing([20.0, 5.0]).show(ui, |ui| {
-                            for row in about_rows(lang) {
-                                ui.label(RichText::new(row.what).color(md::MUTED));
-                                ui.label(RichText::new(row.keys).color(md::LINK));
-                                ui.label(RichText::new(row.syntax).monospace().color(md::CODE));
-                                ui.end_row();
-                            }
+            let r = dialog_with_title_close(
+                ctx,
+                "about_modal",
+                &format!("{} {}", t("About"), crate::APP_TITLE),
+                460.0,
+                true,
+                |ui| {
+                    ui.label(RichText::new(t("Keyboard shortcuts")).strong().color(md::HEAD));
+                    ui.add_space(6.0);
+                    let max_h = (ctx.content_rect().height() * 0.55).max(200.0);
+                    egui::ScrollArea::vertical()
+                        .max_height(max_h)
+                        .auto_shrink([false, true])
+                        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                        .show(ui, |ui| {
+                            egui::Grid::new("shortcuts").num_columns(3).spacing([20.0, 5.0]).show(ui, |ui| {
+                                for row in about_rows(lang) {
+                                    ui.label(RichText::new(row.what).color(md::MUTED));
+                                    ui.label(RichText::new(row.keys).color(md::LINK));
+                                    ui.label(RichText::new(row.syntax).monospace().color(md::CODE));
+                                    ui.end_row();
+                                }
+                            });
                         });
+                    ui.add_space(8.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label("ORDIGITAL Adam Mateusz Brożyński");
+                        ui.label(format!("{}: MIT", t("License")));
+                        ui.label(format!("{} Claude/Codex.", t("Code written with the help of")));
                     });
-                ui.add_space(8.0);
-                ui.separator();
-                ui.add_space(8.0);
-                ui.vertical_centered(|ui| {
-                    ui.label("ORDIGITAL Adam Mateusz Brożyński");
-                    ui.label(format!("{}: MIT", t("License")));
-                    ui.label(format!("{} Claude/Codex.", t("Code written with the help of")));
-                });
-                ui.add_space(16.0);
-                let close = centered_row(ui, |ui| ui.button("OK").clicked() || enter);
-                ui.add_space(8.0);
-                ui.vertical_centered(|ui| {
-                    ui.hyperlink_to(COFFEE_LABEL, COFFEE_URL);
-                });
-                close
-            });
-            if r.inner || r.should_close() {
+                    ui.add_space(16.0);
+                    ui.vertical_centered(|ui| {
+                        ui.hyperlink_to(RichText::new(COFFEE_LABEL).color(COFFEE_COLOR), COFFEE_URL);
+                    });
+                },
+            );
+            if r.should_close() {
                 self.about = false;
             }
         }
@@ -2884,7 +2934,7 @@ impl App {
 
     fn status_bar(&self, ui: &mut Ui) {
         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-            ui.hyperlink_to(RichText::new(COFFEE_LABEL).small(), COFFEE_URL);
+            ui.hyperlink_to(RichText::new(COFFEE_LABEL).small().color(COFFEE_COLOR), COFFEE_URL);
             ui.with_layout(egui::Layout::left_to_right(Align::Center), |ui| self.document_status(ui));
         });
     }
@@ -3133,6 +3183,17 @@ fn dialog<R>(
     width: f32,
     body: impl FnOnce(&mut Ui) -> R,
 ) -> egui::ModalResponse<R> {
+    dialog_with_title_close(ctx, id, title, width, false, body)
+}
+
+fn dialog_with_title_close<R>(
+    ctx: &Context,
+    id: &str,
+    title: &str,
+    width: f32,
+    title_close: bool,
+    body: impl FnOnce(&mut Ui) -> R,
+) -> egui::ModalResponse<R> {
     let id = Id::new(id);
     let width_id = id.with("width");
     // Grows to fit content that turned out wider than `width` (measured on the previous frame).
@@ -3147,7 +3208,17 @@ fn dialog<R>(
             .inner_margin(Margin::symmetric(20, 10))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.add(Label::new(RichText::new(title).strong().color(md::HEAD)).selectable(false));
+                ui.horizontal(|ui| {
+                    ui.add(Label::new(RichText::new(title).strong().color(md::HEAD)).selectable(false));
+                    if title_close {
+                        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                            let close = Button::new(RichText::new("×").size(15.0).color(md::MUTED)).frame(false);
+                            if ui.add(close).clicked() {
+                                ui.close();
+                            }
+                        });
+                    }
+                });
             });
         let inner =
             egui::Frame::NONE.inner_margin(Margin { left: 24, right: 24, top: 18, bottom: 20 }).show(ui, |ui| {
