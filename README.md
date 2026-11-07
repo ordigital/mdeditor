@@ -10,6 +10,8 @@ Polish version: [README.pl.md](README.pl.md).
 
 ## Features
 
+- **File → Export PDF… / Print…** share an A4 document with selectable, searchable Unicode text, Markdown formatting, tables and local/embedded images. Export includes unsaved edits. Linux printing uses the XDG print portal; Windows uses the registered PDF application’s print action.
+
 - **Live preview** of headings, bold, italic, strikethrough, `==highlight==`, inline code and code
   blocks, links, `[[wiki links]]`, `#tags`, footnotes, `%%comments%%`, horizontal rules, front matter.
 - **Lists and tasks** with hanging indents, clickable checkboxes, automatic numbering, Enter continues a list, Shift+Enter continues text within an item, Tab / Shift+Tab indent nested lists.
@@ -61,6 +63,8 @@ installs `mdedit.desktop` and the icon for the current user. On Wayland the task
 
 | Action | Keys |
 | --- | --- |
+| Print | Ctrl+P |
+| Export PDF | Ctrl+Shift+E |
 | New / Open / Save / Save as | Ctrl+N (Ctrl+T) / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
 | Save all | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S on macOS)¹ |
 | Close / Close all / Exit | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |

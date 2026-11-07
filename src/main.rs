@@ -10,6 +10,7 @@ mod i18n;
 mod latex;
 mod markdown;
 mod md;
+mod printing;
 
 use std::path::PathBuf;
 use std::sync::mpsc;

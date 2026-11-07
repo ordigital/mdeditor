@@ -18,9 +18,13 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 rfd = "0.16"
 open = "5"
 syntect = { version = "5.3", default-features = false, features = ["default-syntaxes", "regex-onig"] }
+krilla = { version = "0.8", default-features = false, features = ["raster-images"] }
+ttf-parser = "0.25"
 
 # winit 0.30 has no native Wayland file-drop support; use its typed X11 hook.
 [target.'cfg(target_os = "linux")'.dependencies]
+pollster = "0.4"
+ashpd = { version = "0.11", default-features = false, features = ["async-std"] }
 winit = { version = "0.30", default-features = false, features = ["x11"] }
 
 [profile.release]

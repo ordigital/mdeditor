@@ -25,6 +25,7 @@ navigation:
     symbols: [prefix, Prefix, ListMarker, INDENT_SPACES, indent_level, prefix_key, Fence, front_matter_end]
   src/files.rs: [file_browser, file_name, create_empty]
   src/fonts.rs: embedded_and_system_fonts
+  src/printing.rs: [pdf, breaks, print, unicode_font_embedding, native_print_portal]
   src/i18n.rs: translated_ui_strings
   src/base64.rs: embedded_image_codec
 assets: {assets: embedded_fonts_and_icons, examples: sample_markdown, packaging: desktop_installers, releases: packaged_binaries}
@@ -61,12 +62,12 @@ list_editing:
     - inserting_and_deleting_numbered_items_updates_following_numbers
     - empty_bullet_height_and_continuation_indent_are_stable
   test_harness: 'egui headless run_ui outputs must clear textures_delta; texture tests declare max_texture_side'
-last_verification: {tests: 80, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
+last_verification: {tests: 84, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
 deployment:
   desktop_launcher: /home/adam/.local/share/applications/mdedit.desktop
   executable: target/release/mdedit
   path_alias: /10tb/apps/MDEditor
-  workflow: "After user-facing changes run cargo build --release --offline; cargo test builds only test executables. Restart all editor windows to use the new binary (single instance)."
+  workflow: "After every project change run a fresh cargo build --release --offline (explicit user preference); cargo test builds only test executables. Restart all editor windows to use the new binary (single instance)."
 shortcuts: {new_tab: [Ctrl+N, Ctrl+T], source: "src/app.rs:shortcuts; about_rows derives its labels from this table"}
 review_fixes:
   about: 'src/app.rs:modals uses translated Code written with the help of + Claude/Codex.; shared by all 23 languages'
@@ -226,3 +227,15 @@ coffee_link:
   implementation: 'src/app.rs: COFFEE_LABEL/COFFEE_URL, App.status_bar/document_status and About modal; README.md/README.pl.md'
   behavior: 'Show the exact label ♡ Buy me a coffee in every language, linking to https://buymeacoffee.com/adamstrad. Right-aligned in the status bar, including when there is no document; at the very bottom of About below OK; also near the top of both English and Polish README files.'
   release_exception: 'User explicitly authorized adding this link to the preceding commit/push and replacing v0.1.9 again. Amend latest release commit, move only v0.1.9 and atomically push master/tag with explicit force-with-lease against inspected refs; replace four assets and notes.'
+
+printing_and_pdf:
+  implementation: 'src/app.rs: Action.ExportPdf/Print, App.document_pdf, print_job; src/printing.rs: pdf/breaks/print'
+  menu: 'File -> Export PDF… and Print…; disabled with no document or a modal; printing disabled while its worker is active. Ctrl+P prints and Ctrl+Shift+E exports, from the shared shortcuts table also used by menu labels and About. Three new strings translated in all 22 non-English tables.'
+  shared_layout: 'Separate egui context copies current font definitions and reuses md.build(cursor=None) and paint_decos, without touching editor caches, selection, history or saved state. Exports current buffer including unsaved changes. Detected source files use literal monospace text.'
+  pdf: 'krilla without default features, raster-images only; ttf-parser resolves glyphs from existing font chains. Embedded variable fonts and ToUnicode text mappings preserve search/copy; glyph advances come from the editor. No browser, external converter, Markdown parser duplication or screenshot export.'
+  paper: 'Fixed A4 portrait, 42pt margins, 11pt body/10pt source, dark text on white paper; keep normal rows/table rows together, constrain images to content area. Reuse vector decorations and local/data images. No print settings or PDF configuration UI.'
+  linux: 'Existing ashpd 0.11 async-std + pollster exposes portal PreparePrint (system dialog) followed by Print with the returned token. KDE requires the prepared printer; ashpd 0.11 encodes an absent token as zero, which caused the original Other response. Worker owns an immediately unlinked temporary PDF fd, treats cancellation as success and returns errors to the UI.'
+  windows: 'PowerShell Start-Process -Verb Print invokes the registered PDF handler; requires an application supporting the print verb. Handler decides whether to display a dialog. Temporary input remains for asynchronous viewer access until OS temp cleanup.'
+  limitations: 'Native dialogs and physical printing not exercised headlessly. Fixed A4 independent of printer options; no syntax colors, PDF link annotations or page headers. Rows taller than a page can split; complex scripts inherit the editor glyph layout. Missing font glyphs report an error. Other platforms open the PDF viewer.'
+  tests: [pdf_exports_unsaved_unicode_tables_and_multiple_pages_without_editing, pdf_handles_empty_and_source_documents, printing_actions_are_translated_in_every_language, print_and_export_shortcuts_do_not_trigger_inline_code]
+  verification: 'PDF regression optionally uses installed pdftotext to verify Polish Unicode/table extraction, hidden Markdown markers and exactly one copy of each row across pages. Manual pdfinfo/pdfimages/pdftoppm check confirms A4, embedded image and readable formatting. cargo check --offline --target x86_64-pc-windows-gnu passes.'

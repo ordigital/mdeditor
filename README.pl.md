@@ -8,6 +8,8 @@ Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyc
 
 ## Funkcje
 
+- **Plik → Eksportuj PDF… / Drukuj…** korzystają ze wspólnego dokumentu A4 z przeszukiwalnym i kopiowalnym tekstem Unicode, formatowaniem Markdown, tabelami oraz obrazami lokalnymi i osadzonymi. Eksport obejmuje niezapisane zmiany. Drukowanie w Linuksie używa portalu druku XDG, a w Windows — polecenia druku skojarzonej aplikacji PDF.
+
 - Menu **Składnia**: Automatycznie, Markdown lub dowolny obsługiwany język kodu/konfiguracji dla bieżącej zakładki. Ręczny wybór pozostaje aktywny po zapisie i „Zapisz jako”, do przywrócenia automatycznego wykrywania lub zamknięcia zakładki. Nie zmienia nazwy ani zawartości pliku.
 
 - Cztery szerokości widoku: **Wąski, Średni, Szeroki, Pełny**, przełączane przez **F2**. Nieco większa czcionka w plikach kodu.
@@ -59,6 +61,8 @@ instaluje dla bieżącego użytkownika `mdedit.desktop` i ikonę. Na Wayland iko
 | Akcja | Klawisze |
 | --- | --- |
 | Zmiana szerokości widoku | F2 |
+| Drukuj | Ctrl+P |
+| Eksportuj PDF | Ctrl+Shift+E |
 | Nowy / Otwórz / Zapisz / Zapisz jako | Ctrl+N (Ctrl+T) / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
 | Zapisz wszystko | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S na macOS)¹ |
 | Zamknij / Zamknij wszystko / Wyjście | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |

@@ -67,6 +67,8 @@ enum Action {
     Save,
     SaveAs,
     SaveAll,
+    ExportPdf,
+    Print,
     Close,
     CloseAll,
     Copy,
@@ -518,6 +520,7 @@ pub struct App {
     /// When the settings started to differ from the saved ones.
     cfg_changed_at: Option<f64>,
     error: Option<String>,
+    print_job: Option<Receiver<Result<(), String>>>,
     close_queue: Vec<u64>,
     file_prompt: Option<(u64, bool)>,
     next_disk_check: f64,
@@ -613,6 +616,8 @@ fn about_rows(lang: Lang) -> Vec<AboutRow> {
         by(t("Save"), &[Action::Save], ""),
         by(t("Save as…"), &[Action::SaveAs], ""),
         by(t("Save all"), &[Action::SaveAll], ""),
+        by(t("Export PDF…"), &[Action::ExportPdf], ""),
+        by(t("Print…"), &[Action::Print], ""),
         by(t("Close"), &[Action::Close], ""),
         by(t("Close all"), &[Action::CloseAll], ""),
         by(t("Exit"), &[Action::Exit], ""),
@@ -664,6 +669,8 @@ fn build_shortcuts() -> Vec<(Modifiers, Key, Action)> {
         (save_all_mods(), Key::S, SaveAll),
         (cs, Key::S, SaveAs),
         (c, Key::S, Save),
+        (cs, Key::E, ExportPdf),
+        (c, Key::P, Print),
         (cs, Key::W, CloseAll),
         (c, Key::W, Close),
         (c, Key::O, Open),
@@ -859,6 +866,7 @@ impl App {
             applied_gamma: 0.0,
             cfg_changed_at: None,
             error: None,
+            print_job: None,
             close_queue: vec![],
             file_prompt: None,
             next_disk_check: 0.0,
@@ -1609,6 +1617,51 @@ impl App {
             Action::Save | Action::SaveAs if !self.docs.is_empty() => {
                 self.save(self.active, a == Action::SaveAs);
             }
+            Action::ExportPdf | Action::Print if !self.docs.is_empty() && !self.has_modal() => {
+                let doc = &self.docs[self.active];
+                let title = doc.title(self.cfg.lang);
+                let path = if a == Action::ExportPdf {
+                    let mut dialog = rfd::FileDialog::new()
+                        .add_filter("PDF", &["pdf"])
+                        .set_file_name(format!("{}.pdf", doc.stem(self.cfg.lang)));
+                    if let Some(dir) = doc.dir() {
+                        dialog = dialog.set_directory(dir);
+                    }
+                    let Some(path) = dialog.save_file() else { return };
+                    // Never replace the document itself, even if a PDF was opened as text.
+                    if doc.path.as_ref().is_some_and(|source| {
+                        source == &path
+                            || source.canonicalize().ok().zip(path.canonicalize().ok()).is_some_and(|(a, b)| a == b)
+                    }) {
+                        self.error = Some(self.t("Choose a different file").into());
+                        return;
+                    }
+                    Some(path)
+                } else {
+                    if self.print_job.is_some() {
+                        return;
+                    }
+                    None
+                };
+                match self.document_pdf(ctx) {
+                    Ok(bytes) => {
+                        if let Some(path) = path {
+                            if let Err(e) = std::fs::write(&path, bytes) {
+                                self.error = Some(format!("{}: {e}", path.display()));
+                            }
+                        } else {
+                            let (tx, rx) = std::sync::mpsc::channel();
+                            self.print_job = Some(rx);
+                            let ctx = ctx.clone();
+                            std::thread::spawn(move || {
+                                let _ = tx.send(crate::printing::print(&bytes, &title));
+                                ctx.request_repaint();
+                            });
+                        }
+                    }
+                    Err(e) => self.error = Some(format!("{}: {e}", self.t("Export PDF…"))),
+                }
+            }
             Action::SaveAll => {
                 for i in 0..self.docs.len() {
                     if self.docs[i].dirty() {
@@ -1692,6 +1745,71 @@ impl App {
         }
     }
 
+    /// A separate print context keeps editor caches, textures, cursor and history untouched.
+    fn document_pdf(&self, ctx: &Context) -> Result<Vec<u8>, String> {
+        use crate::printing::{COLUMN, CONTENT_HEIGHT};
+        let doc = &self.docs[self.active];
+        let print_ctx = Context::default();
+        print_ctx.set_fonts(ctx.fonts(|f| f.definitions().clone()));
+        let mut look = self.cfg.look();
+        look.size = 11.0;
+        let dir = doc.dir();
+        let mut images = HashMap::new();
+        let mut page_breaks = vec![0.0];
+        let output = print_ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(COLUMN, CONTENT_HEIGHT))),
+                max_texture_side: Some(MAX_TEXTURE_SIDE as usize),
+                ..Default::default()
+            },
+            |ui| {
+                let ctx = ui.ctx();
+                let mut image_size = |src: &str| {
+                    let key = image_key(dir.as_deref(), src)?;
+                    let image = images.entry(key.clone()).or_insert_with(|| load_image(ctx, dir.as_deref(), src));
+                    let size = image.as_ref()?.1;
+                    let scale = (COLUMN / size.x).min((CONTENT_HEIGHT - 20.0) / size.y).min(1.0);
+                    Some((key, size * scale))
+                };
+                let (galley, decos) = if doc.syntax.is_none() {
+                    md::build(&doc.text, None, COLUMN, &look, 1.0, &mut image_size, &mut |job| {
+                        ctx.fonts_mut(|f| f.layout_job(job))
+                    })
+                } else {
+                    let mut job =
+                        egui::text::LayoutJob::simple(doc.text.clone(), FontId::monospace(10.0), md::TEXT, COLUMN);
+                    job.break_on_newline = true;
+                    (ctx.fonts_mut(|f| f.layout_job(job)), vec![])
+                };
+                page_breaks = crate::printing::breaks(&galley);
+                let painter = ctx
+                    .layer_painter(egui::LayerId::new(egui::Order::Background, Id::new("print")))
+                    .with_clip_rect(Rect::EVERYTHING);
+                let mut backgrounds = vec![];
+                // Reserve a slot for backgrounds, exactly as the live editor does.
+                let background = painter.add(Shape::Noop);
+                painter.galley(Pos2::ZERO, galley.clone(), md::TEXT);
+                paint_decos(
+                    &DecoCx {
+                        ctx,
+                        painter: &painter,
+                        galley: &galley,
+                        pos: Pos2::ZERO,
+                        col_w: COLUMN,
+                        look: &look,
+                        images: &images,
+                        pointer: None,
+                        clicked: false,
+                    },
+                    &decos,
+                    &mut backgrounds,
+                );
+                painter.set(background, Shape::Vec(backgrounds));
+            },
+        );
+        crate::printing::pdf(&print_ctx, output, &page_breaks)
+    }
+
     fn menu_bar(&mut self, ui: &mut Ui, acts: &mut Vec<Action>) {
         let lang = self.cfg.lang;
         let t = |s| tr(lang, s);
@@ -1724,6 +1842,11 @@ impl App {
                 item(ui, acts, t("Save"), Action::Save);
                 item(ui, acts, t("Save as…"), Action::SaveAs);
                 item(ui, acts, t("Save all"), Action::SaveAll);
+                ui.separator();
+                ui.add_enabled_ui(!self.docs.is_empty() && !self.has_modal(), |ui| {
+                    item(ui, acts, t("Export PDF…"), Action::ExportPdf);
+                    ui.add_enabled_ui(self.print_job.is_none(), |ui| item(ui, acts, t("Print…"), Action::Print));
+                });
                 ui.separator();
                 item(ui, acts, t("Close"), Action::Close);
                 item(ui, acts, t("Close all"), Action::CloseAll);
@@ -2913,6 +3036,14 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.now = ctx.input(|i| i.time);
+        if let Some(job) = &self.print_job
+            && let Ok(result) = job.try_recv()
+        {
+            self.print_job = None;
+            if let Err(e) = result {
+                self.error = Some(format!("{}: {e}", self.t("Print…")));
+            }
+        }
         if let Some(worker) = &self.syntax_worker {
             for output in worker.drain() {
                 if let Some(doc) = self.docs.iter_mut().find(|doc| doc.id == output.id) {
@@ -3674,6 +3805,35 @@ mod tests {
     }
 
     #[test]
+    fn print_and_export_shortcuts_do_not_trigger_inline_code() {
+        for (modifiers, key, expected) in [
+            (Modifiers::COMMAND, Key::P, Action::Print),
+            (Modifiers::COMMAND | Modifiers::SHIFT, Key::E, Action::ExportPdf),
+            (Modifiers::COMMAND, Key::E, Action::Fmt(Fmt::Code)),
+        ] {
+            let ctx = Context::default();
+            let mut actions = vec![];
+            let mut output = ctx.run_ui(
+                RawInput {
+                    events: vec![Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }],
+                    ..Default::default()
+                },
+                |ui| {
+                    ui.input_mut(|input| {
+                        for &(m, k, action) in shortcuts() {
+                            if input.consume_shortcut(&KeyboardShortcut::new(m, k)) {
+                                actions.push(action);
+                            }
+                        }
+                    });
+                },
+            );
+            output.textures_delta.clear();
+            assert!(actions == [expected], "unexpected shortcut dispatch for {key:?}");
+        }
+    }
+
+    #[test]
     fn about_lists_every_shortcut() {
         let covered: Vec<Action> = about_rows(Lang::English).into_iter().flat_map(|r| r.covers).collect();
         for &(m, k, a) in shortcuts() {
@@ -3682,6 +3842,60 @@ mod tests {
     }
     use eframe::App as _;
     use egui::{Event, RawInput};
+
+    #[test]
+    fn pdf_exports_unsaved_unicode_tables_and_multiple_pages_without_editing() {
+        let source = format!(
+            "# Zażółć gęślą jaźń\n\n**Pogrubienie** i *kursywa*\n\n| Kolumna | Wartość |\n| --- | --- |\n| Szukaj | Żółw |\n\n- punkt\n- [x] gotowe\n\n> cytat\n\n```rust\nlet x = 42;\n```\n\n{}",
+            (0..160).map(|i| format!("Wiersz{i:03} przeszukiwalny tekst\n")).collect::<String>()
+        );
+        let source = format!("{source}\n![icon]({}/assets/icon.png)\n", env!("CARGO_MANIFEST_DIR"));
+        let (mut app, ctx) = app_with(&source);
+        fonts::apply(&ctx, "", 400, 700, Lang::Polish);
+        frame(&mut app, &ctx, vec![]);
+        app.docs[0].saved = "older disk content".into();
+        let undo = app.docs[0].undo.clone();
+        let pdf = app.document_pdf(&ctx).unwrap();
+        assert!(pdf.starts_with(b"%PDF-"));
+        assert!(pdf.windows(10).any(|w| w == b"/ToUnicode"));
+        assert!(pdf.windows(6).any(|w| w == b"/Image"));
+        assert_eq!(app.docs[0].text, source);
+        assert_eq!(app.docs[0].saved, "older disk content");
+        assert_eq!(app.docs[0].undo, undo);
+        assert!(app.docs[0].dirty());
+        // Poppler is optional for contributors; where installed it checks real
+        // Unicode extraction and ensures clipped pages don't duplicate text.
+        let dir = std::env::temp_dir().join(format!("mdedit-pdf-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("document.pdf");
+        std::fs::write(&path, pdf).unwrap();
+        match std::process::Command::new("pdftotext").arg(&path).arg("-").output() {
+            Ok(output) => {
+                assert!(output.status.success());
+                let text = String::from_utf8(output.stdout).unwrap();
+                assert!(text.contains("Zażółć gęślą jaźń"), "{text}");
+                assert!(text.contains("Kolumna") && text.contains("Żółw"), "{text}");
+                assert!(!text.contains("**") && !text.contains("```"));
+                for i in 0..160 {
+                    assert_eq!(text.matches(&format!("Wiersz{i:03}")).count(), 1, "row {i}: {text}");
+                }
+                assert!(text.matches('\u{c}').count() >= 3);
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => panic!("{e}"),
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn pdf_handles_empty_and_source_documents() {
+        let (mut app, ctx) = app_with("");
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.document_pdf(&ctx).unwrap().starts_with(b"%PDF-"));
+        app.docs[0].text = "<html>\n  <body>Zażółć &amp; literal</body>\n</html>".into();
+        app.docs[0].syntax = Some(Syntax::Html);
+        assert!(app.document_pdf(&ctx).unwrap().starts_with(b"%PDF-"));
+    }
 
     fn app_with(text: &str) -> (App, Context) {
         let ctx = Context::default();
