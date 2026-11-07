@@ -15,7 +15,7 @@ Szybki, minimalistyczny **edytor Markdown typu WYSIWYG** napisany w Rust z użyc
 - Cztery szerokości widoku: **Wąski, Średni, Szeroki, Pełny**, przełączane przez **F2**. Nieco większa czcionka w plikach kodu.
 - Przeciąganie plików na okno otwiera je w zakładkach. Okno otwierania domyślnie pokazuje wszystkie pliki; filtr Markdown można wybrać ręcznie. Na Linuksie aplikacja preferuje X11/XWayland, gdy jest dostępny — winit 0.30 nie odbiera upuszczanych plików w natywnym Waylandzie.
 
-- **Pasek formatowania pod zakładkami**: nagłówki 1–6, zwykły tekst, style, linki, listy, zadania, cytaty i obrazy.
+- **Okienko formatowania po zaznaczeniu tekstu Markdown**: nad końcem zaznaczenia, po cztery mniejsze, kwadratowe ikony w rzędzie. Kliknięcie poza okienkiem lub Escape zamyka je. **Ctrl+~** przełącza na większy, przewijany wybór emoji z polem wyszukiwania na całą szerokość (dostępny również w menu Edycja). Wyniki filtrują się podczas pisania według nazw i słów kluczowych w języku interfejsu lub po angielsku, bez internetu; bez zaznaczenia otwiera go przy kursorze. Emoji korzystają z osadzonej czcionki Noto Color Emoji i mają te same kolory w wyborze, dokumencie oraz PDF; są wstawiane jako zwykły tekst Unicode.
 - **Ctrl+Shift+K** tworzy nowy plik Markdown w folderze bieżącego dokumentu i linkuje do niego zaznaczony tekst. Enter lub Zapisz potwierdza; istniejące pliki nie są nadpisywane.
 - **Podgląd na żywo** nagłówków, pogrubienia, kursywy, przekreślenia, `==wyróżnienia==`, kodu w linii i bloków kodu, linków, `[[linków wiki]]`, `#tagów`, przypisów, `%%komentarzy%%`, linii poziomych i nagłówka YAML.
 - **Listy i zadania** z wiszącym wcięciem, klikalne pola wyboru. Numeracja aktualizuje się automatycznie. Enter dodaje kolejny punkt, Shift+Enter nową linię w tym samym punkcie, a Tab i Shift+Tab zmieniają poziom zagnieżdżenia.
@@ -63,6 +63,7 @@ instaluje dla bieżącego użytkownika `mdedit.desktop` i ikonę. Na Wayland iko
 | Zmiana szerokości widoku | F2 |
 | Drukuj | Ctrl+P |
 | Eksportuj PDF | Ctrl+Shift+E |
+| Wstaw emoji | Ctrl+~ (działa także Ctrl+Shift+`) |
 | Nowy / Otwórz / Zapisz / Zapisz jako | Ctrl+N (Ctrl+T) / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
 | Zapisz wszystko | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S na macOS)¹ |
 | Zamknij / Zamknij wszystko / Wyjście | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |

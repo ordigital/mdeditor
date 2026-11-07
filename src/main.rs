@@ -3,6 +3,7 @@
 
 mod app;
 mod base64;
+mod emoji;
 mod files;
 mod fonts;
 mod highlight;

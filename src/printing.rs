@@ -80,6 +80,7 @@ fn text(
         let mut glyphs = Vec::new();
         let mut run_font: Option<Font> = None;
         let mut run_section = 0;
+        let mut run_emoji = false;
         let mut origin = Point::from_xy(0.0, 0.0);
         let flush = |surface: &mut Surface<'_>,
                      run: &mut String,
@@ -91,7 +92,13 @@ fn text(
                 && !glyphs.is_empty()
             {
                 let format = &sections[si].format;
-                fill(surface, format.color, true);
+                let color = if run.chars().all(|ch| crate::emoji::png(ch).is_some()) {
+                    // The color overlay supplies visible ink; retain Unicode text for search/copy.
+                    Color32::TRANSPARENT
+                } else {
+                    format.color
+                };
+                fill(surface, color, true);
                 surface.draw_glyphs(origin, glyphs, font.clone(), run, format.font_id.size, false);
             }
             run.clear();
@@ -129,10 +136,16 @@ fn text(
             let (font, gid) = fonts.glyph(format, glyph.chr)?;
             let x = shape.pos.x + row.pos.x + glyph.pos.x;
             let y = shape.pos.y + row.pos.y + glyph.pos.y;
-            if run_font.as_ref() != Some(&font) || section != run_section || (x - previous_end).abs() > 0.1 {
+            let is_emoji = crate::emoji::png(glyph.chr).is_some();
+            if run_font.as_ref() != Some(&font)
+                || section != run_section
+                || is_emoji != run_emoji
+                || (x - previous_end).abs() > 0.1
+            {
                 flush(surface, &mut run, &mut glyphs, &run_font, run_section, origin);
                 run_font = Some(font);
                 run_section = section;
+                run_emoji = is_emoji;
                 origin = Point::from_xy(x, y);
             }
             let start = run.len();

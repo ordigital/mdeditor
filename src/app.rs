@@ -68,6 +68,7 @@ enum Action {
     SaveAs,
     SaveAll,
     ExportPdf,
+    Emoji,
     Print,
     Close,
     CloseAll,
@@ -88,6 +89,50 @@ enum Action {
     Fmt(Fmt),
 }
 
+/// Character endpoints identify a selection independently of scroll/font geometry.
+#[derive(Clone, Copy)]
+struct EditorSelection {
+    doc_id: u64,
+    range: (usize, usize),
+    anchor: Pos2,
+}
+
+impl EditorSelection {
+    fn key(self) -> (u64, (usize, usize)) {
+        (self.doc_id, self.range)
+    }
+}
+
+struct SelectionTools {
+    selection: EditorSelection,
+    emoji: bool,
+    query: String,
+    focus_search: bool,
+    rect: Rect,
+}
+
+const TOOL_COLUMNS: usize = 4;
+const TOOL_GAP: f32 = 3.0;
+const TOOL_BUTTON: Vec2 = Vec2::splat(26.0);
+const EMOJI_BUTTON: Vec2 = Vec2::splat(36.0);
+const EMOJI_SEARCH_HEIGHT: f32 = 28.0;
+const EMOJI_SEARCH_ID: &str = "emoji_search";
+
+fn emoji_content_size() -> Vec2 {
+    vec2(
+        TOOL_COLUMNS as f32 * (EMOJI_BUTTON.x + TOOL_GAP) - TOOL_GAP,
+        6.0 * (EMOJI_BUTTON.y + TOOL_GAP) - TOOL_GAP + EMOJI_SEARCH_HEIGHT + TOOL_GAP,
+    )
+}
+
+fn tool_content_size() -> Vec2 {
+    let rows = formatting_buttons().len().div_ceil(TOOL_COLUMNS);
+    vec2(
+        TOOL_COLUMNS as f32 * (TOOL_BUTTON.x + TOOL_GAP) - TOOL_GAP,
+        rows as f32 * (TOOL_BUTTON.y + TOOL_GAP) - TOOL_GAP,
+    )
+}
+
 struct NewPage {
     name: String,
     doc_id: u64,
@@ -102,6 +147,7 @@ struct NewPage {
 fn formatting_buttons() -> &'static [(&'static str, &'static str, Action)] {
     use Fmt::*;
     &[
+        ("P", "Normal text", Action::Fmt(Heading(0))),
         ("B", "Bold", Action::Fmt(Bold)),
         ("I", "Italic", Action::Fmt(Italic)),
         ("S", "Strikethrough", Action::Fmt(Strike)),
@@ -109,7 +155,6 @@ fn formatting_buttons() -> &'static [(&'static str, &'static str, Action)] {
         ("", "Highlight", Action::Fmt(Mark)),
         ("", "Link", Action::Fmt(Link)),
         ("", "New linked page", Action::NewPage),
-        ("P", "Normal text", Action::Fmt(Heading(0))),
         ("H1", "Heading 1–6", Action::Fmt(Heading(1))),
         ("H2", "Heading 1–6", Action::Fmt(Heading(2))),
         ("H3", "Heading 1–6", Action::Fmt(Heading(3))),
@@ -124,6 +169,14 @@ fn formatting_buttons() -> &'static [(&'static str, &'static str, Action)] {
     ]
 }
 
+/// Allocate a strict square: text/font ascent must not resize or offset grid cells.
+fn tool_button(ui: &mut Ui, size: Vec2) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(size, Sense::click());
+    let visuals = ui.style().interact(&response);
+    ui.painter().rect(rect, visuals.corner_radius, visuals.weak_bg_fill, visuals.bg_stroke, egui::StrokeKind::Inside);
+    response
+}
+
 /// Draw symbols as geometry: they must not depend on glyph coverage in the UI font.
 fn formatting_button(ui: &mut Ui, icon: &str, action: Action) -> egui::Response {
     let vector = matches!(
@@ -132,21 +185,34 @@ fn formatting_button(ui: &mut Ui, icon: &str, action: Action) -> egui::Response 
             | Action::NewPage
             | Action::Fmt(Fmt::Mark | Fmt::Link | Fmt::Bullet | Fmt::Ordered | Fmt::Task | Fmt::Quote)
     );
-    let text = RichText::new(if vector { "" } else { icon }).size(15.0);
+    let text = RichText::new(if vector { "" } else { icon }).size(12.0);
     let text = match action {
         Action::Fmt(Fmt::Bold) => text.strong(),
         Action::Fmt(Fmt::Italic) => text.italics(),
         Action::Fmt(Fmt::Strike) => text.strikethrough(),
         _ => text,
     };
-    let response = ui.add_sized(vec2(36.0, 28.0), Button::new(text));
+    let response = tool_button(ui, TOOL_BUTTON);
+    if !vector {
+        let galley = egui::WidgetText::from(text).into_galley(
+            ui,
+            Some(egui::TextWrapMode::Truncate),
+            TOOL_BUTTON.x - 4.0,
+            egui::TextStyle::Button,
+        );
+        ui.painter().galley(
+            response.rect.center() - galley.size() * 0.5,
+            galley,
+            ui.style().interact(&response).fg_stroke.color,
+        );
+    }
     if vector && ui.is_rect_visible(response.rect) {
         let painter = ui.painter();
         let center = response.rect.center();
         let stroke = ui.style().interact(&response).fg_stroke;
         let color = stroke.color;
         let stroke = Stroke::new(1.5, color);
-        let at = |x, y| center + vec2(x, y);
+        let at = |x, y| center + vec2(x, y) * 0.85;
         let line = |a, b| {
             painter.line_segment([a, b], stroke);
         };
@@ -155,7 +221,16 @@ fn formatting_button(ui: &mut Ui, icon: &str, action: Action) -> egui::Response 
         };
         match action {
             Action::Fmt(Fmt::Mark) => {
-                painter.rect_filled(Rect::from_center_size(center, vec2(15.0, 9.0)), 0.5, color);
+                painter.add(egui::Shape::closed_line(
+                    vec![at(-4.0, 1.0), at(3.0, -6.0), at(7.0, -2.0), at(0.0, 5.0)],
+                    stroke,
+                ));
+                painter.add(egui::Shape::convex_polygon(
+                    vec![at(-4.0, 1.0), at(0.0, 5.0), at(-3.0, 6.0), at(-5.0, 4.0)],
+                    color,
+                    Stroke::NONE,
+                ));
+                line(at(-8.0, 9.0), at(2.0, 9.0));
             }
             Action::Fmt(Fmt::Bullet | Fmt::Ordered) => {
                 for (i, y) in [-5.0, 0.0, 5.0].into_iter().enumerate() {
@@ -192,9 +267,20 @@ fn formatting_button(ui: &mut Ui, icon: &str, action: Action) -> egui::Response 
                 line(at(3.0, 5.0), at(6.0, 2.0));
             }
             _ => {
-                line(at(-6.0, 6.0), at(5.0, -5.0));
-                line(at(-2.0, -5.0), at(5.0, -5.0));
-                line(at(5.0, -5.0), at(5.0, 2.0));
+                // Two diagonal capsule outlines form the familiar chain-link symbol.
+                for offset in [-4.0, 4.0] {
+                    let mut points = Vec::with_capacity(18);
+                    for end in [-1.0_f32, 1.0] {
+                        for step in 0..=8 {
+                            let angle = std::f32::consts::PI * (step as f32 / 8.0 + if end < 0.0 { 0.5 } else { -0.5 });
+                            let u = offset + end * 2.5 + angle.cos() * 3.0;
+                            let v = angle.sin() * 3.0;
+                            let diagonal = std::f32::consts::FRAC_1_SQRT_2;
+                            points.push(at((u + v) * diagonal, (v - u) * diagonal));
+                        }
+                    }
+                    painter.add(egui::Shape::closed_line(points, stroke));
+                }
                 if action == Action::NewPage {
                     line(at(4.0, 5.0), at(10.0, 5.0));
                     line(at(7.0, 2.0), at(7.0, 8.0));
@@ -534,6 +620,9 @@ pub struct App {
     scroll_to: Option<usize>,
     /// Editor scroll offset to apply on the next frame (drag-selection auto-scroll).
     scroll_pending: Option<f32>,
+    editor_selection: Option<EditorSelection>,
+    seen_selection: Option<(u64, (usize, usize))>,
+    selection_tools: Option<SelectionTools>,
     title: String,
     recent: Vec<PathBuf>,
     browser: Option<files::Browser>,
@@ -572,7 +661,7 @@ fn shortcut_label(m: Modifiers, k: Key) -> String {
     if m.mac_cmd && m.ctrl {
         s += "Cmd+";
     }
-    s + k.symbol_or_name()
+    s + if k == Key::Backtick { "~" } else { k.symbol_or_name() }
 }
 
 fn save_all_mods() -> Modifiers {
@@ -618,6 +707,7 @@ fn about_rows(lang: Lang) -> Vec<AboutRow> {
         by(t("Save all"), &[Action::SaveAll], ""),
         by(t("Export PDF…"), &[Action::ExportPdf], ""),
         by(t("Print…"), &[Action::Print], ""),
+        by(t("Insert emoji…"), &[Action::Emoji], ""),
         by(t("Close"), &[Action::Close], ""),
         by(t("Close all"), &[Action::CloseAll], ""),
         by(t("Exit"), &[Action::Exit], ""),
@@ -671,6 +761,7 @@ fn build_shortcuts() -> Vec<(Modifiers, Key, Action)> {
         (c, Key::S, Save),
         (cs, Key::E, ExportPdf),
         (c, Key::P, Print),
+        (c, Key::Backtick, Emoji),
         (cs, Key::W, CloseAll),
         (c, Key::W, Close),
         (c, Key::O, Open),
@@ -879,6 +970,9 @@ impl App {
             pasted: false,
             scroll_to: None,
             scroll_pending: None,
+            editor_selection: None,
+            seen_selection: None,
+            selection_tools: None,
             title: String::new(),
             recent: Config::load_recent(),
             browser: None,
@@ -1273,31 +1367,193 @@ impl App {
             || self.delete_file.is_some()
     }
 
-    fn formatting_bar(&self, ui: &mut Ui, acts: &mut Vec<Action>) {
-        let enabled = self.docs.get(self.active).is_some_and(|d| d.syntax.is_none()) && !self.has_modal();
-        ui.add_enabled_ui(enabled, |ui| {
-            let buttons = formatting_buttons();
-            let width = ui.available_width();
-            let columns = (((width + 3.0) / 39.0).floor() as usize).max(1);
-            for row in buttons.chunks(columns) {
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 3.0;
-                    let row_width = row.len() as f32 * 39.0 - 3.0;
-                    ui.add_space(((width - row_width) * 0.5).max(0.0));
-                    for &(icon, label, action) in row {
-                        let shortcut = shortcuts()
-                            .iter()
-                            .find(|(_, _, a)| *a == action)
-                            .map(|(m, k, _)| shortcut_label(*m, *k))
-                            .unwrap_or_default();
-                        let tooltip = format!("{}  {shortcut}", self.t(label));
-                        if formatting_button(ui, icon, action).on_hover_text(tooltip).clicked() {
-                            acts.push(action);
-                        }
+    fn formatting_grid(&self, ui: &mut Ui, acts: &mut Vec<Action>) {
+        for row in formatting_buttons().chunks(TOOL_COLUMNS) {
+            ui.horizontal(|ui| {
+                for &(icon, label, action) in row {
+                    let shortcut = shortcuts()
+                        .iter()
+                        .find(|(_, _, a)| *a == action)
+                        .map(|(m, k, _)| shortcut_label(*m, *k))
+                        .unwrap_or_default();
+                    let tooltip = format!("{}  {shortcut}", self.t(label));
+                    if formatting_button(ui, icon, action).on_hover_text(tooltip).clicked() {
+                        acts.push(action);
                     }
+                }
+            });
+        }
+    }
+
+    fn dismiss_selection_tools(&mut self, ctx: &Context) {
+        if self.has_modal() {
+            self.selection_tools = None;
+            return;
+        }
+        if let Some(tools) = &self.selection_tools {
+            let outside = ctx.input(|i| {
+                i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !tools.rect.contains(p))
+            });
+            let escape = ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+            if outside || escape {
+                let selection = tools.selection;
+                let restore = escape || tools.emoji;
+                self.selection_tools = None;
+                if restore && self.docs.get(self.active).is_some_and(|doc| doc.id == selection.doc_id) {
+                    self.set_selection(ctx, selection.range.0, selection.range.1);
+                }
+            }
+        }
+    }
+
+    fn selection_popup(&mut self, ctx: &Context, acts: &mut Vec<Action>) {
+        let Some(selection) = self.editor_selection else {
+            self.selection_tools = None;
+            self.seen_selection = None;
+            return;
+        };
+        let key = selection.key();
+        if self.has_modal() {
+            self.selection_tools = None;
+            self.seen_selection = Some(key);
+            return;
+        }
+        if self.selection_tools.as_ref().is_some_and(|tools| tools.selection.doc_id != selection.doc_id) {
+            self.selection_tools = None;
+        }
+        if self.selection_tools.as_ref().is_some_and(|tools| !tools.emoji)
+            && (selection.range.0 == selection.range.1 || self.docs[self.active].syntax.is_some())
+        {
+            self.selection_tools = None;
+        }
+        let dragging = ctx.input(|i| i.pointer.any_down());
+        if dragging && self.seen_selection != Some(key) {
+            // A fresh drag can end on exactly the previously dismissed range.
+            // Reopen only on release, even when its final endpoints are unchanged.
+            self.seen_selection = None;
+        }
+        if !dragging && self.seen_selection != Some(key) {
+            self.seen_selection = Some(key);
+            if self.selection_tools.as_ref().is_none_or(|tools| !tools.emoji) {
+                self.selection_tools = (selection.range.0 != selection.range.1
+                    && self.docs[self.active].syntax.is_none())
+                .then_some(SelectionTools {
+                    selection,
+                    emoji: false,
+                    query: String::new(),
+                    focus_search: false,
+                    rect: Rect::NOTHING,
                 });
             }
-        });
+        }
+        let Some(tools) = &mut self.selection_tools else { return };
+        tools.selection = selection;
+        let emoji = tools.emoji;
+        let mut query = std::mem::take(&mut tools.query);
+        let focus_search = std::mem::take(&mut tools.focus_search);
+        let frame = egui::Frame::popup(&ctx.global_style()).inner_margin(8).fill(CHROME);
+        let size = if emoji { emoji_content_size() } else { tool_content_size() };
+        let total = size + frame.total_margin().sum();
+        // Prefer the bottom-left corner immediately above the selection's end;
+        // shift just enough to keep the whole window inside a small viewport.
+        let screen = ctx.content_rect().shrink(4.0);
+        let anchor = pos2(
+            selection.anchor.x.clamp(screen.left(), (screen.right() - total.x).max(screen.left())),
+            (selection.anchor.y - 6.0).clamp((screen.top() + total.y).min(screen.bottom()), screen.bottom()),
+        );
+        let mut picked = None;
+        let action_count = acts.len();
+        let response = egui::Area::new(Id::new("selection_tools"))
+            .order(egui::Order::Foreground)
+            .pivot(Align2::LEFT_TOP)
+            .fixed_pos(anchor - vec2(0.0, total.y))
+            .default_size(total)
+            .movable(false)
+            .fade_in(false)
+            .show(ctx, |ui| {
+                frame.show(ui, |ui| {
+                    ui.set_min_size(size);
+                    ui.set_max_size(size);
+                    ui.spacing_mut().item_spacing = Vec2::splat(TOOL_GAP);
+                    if emoji {
+                        let search = ui.add_sized(
+                            vec2(size.x, EMOJI_SEARCH_HEIGHT),
+                            TextEdit::singleline(&mut query)
+                                .return_key(None)
+                                .id(Id::new(EMOJI_SEARCH_ID))
+                                .hint_text(self.t("Search emoji…"))
+                                .desired_width(f32::INFINITY),
+                        );
+                        if focus_search {
+                            search.request_focus();
+                        }
+                        let chars = crate::emoji::search(&query, self.cfg.lang);
+                        let grid_height = size.y - EMOJI_SEARCH_HEIGHT - TOOL_GAP;
+                        ui.spacing_mut().scroll.floating = true;
+                        ui.spacing_mut().scroll.bar_width = 3.0;
+                        ui.spacing_mut().scroll.bar_inner_margin = 0.0;
+                        ui.spacing_mut().scroll.bar_outer_margin = 0.0;
+                        // Put the narrow overlay scrollbar in the frame padding,
+                        // leaving identical left/right grid margins in both modes.
+                        let scroll_rect =
+                            Rect::from_min_size(ui.next_widget_position(), vec2(size.x + 5.0, grid_height));
+                        let mut scroll = ScrollArea::vertical().id_salt("emoji_palette");
+                        if search.changed() {
+                            scroll = scroll.vertical_scroll_offset(0.0);
+                        }
+                        scroll
+                            .scroll_bar_rect(scroll_rect)
+                            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysVisible)
+                            .max_height(grid_height)
+                            .min_scrolled_height(grid_height)
+                            .auto_shrink([false, false])
+                            .show_rows(ui, EMOJI_BUTTON.y, chars.len().div_ceil(TOOL_COLUMNS), |ui, rows| {
+                                if chars.is_empty() {
+                                    ui.label(self.t("No emoji found"));
+                                }
+                                for row in rows {
+                                    ui.horizontal(|ui| {
+                                        for ch in chars.iter().skip(row * TOOL_COLUMNS).take(TOOL_COLUMNS) {
+                                            let response = tool_button(ui, EMOJI_BUTTON);
+                                            crate::emoji::paint_character(
+                                                ui.ctx(),
+                                                ui.painter(),
+                                                *ch,
+                                                response.rect.shrink(4.0),
+                                            );
+                                            let response =
+                                                response.on_hover_text(crate::emoji::name(*ch, self.cfg.lang));
+                                            response.widget_info(|| {
+                                                egui::WidgetInfo::labeled(
+                                                    egui::WidgetType::Button,
+                                                    ui.is_enabled(),
+                                                    ch.to_string(),
+                                                )
+                                            });
+                                            if response.clicked() {
+                                                picked = Some(*ch);
+                                            }
+                                        }
+                                    });
+                                }
+                            });
+                    } else {
+                        self.formatting_grid(ui, acts);
+                    }
+                });
+            });
+        let tools = self.selection_tools.as_mut().unwrap();
+        tools.rect = response.response.rect;
+        tools.query = query;
+        if picked.is_some() || acts.len() != action_count {
+            self.set_selection(ctx, selection.range.0, selection.range.1);
+        }
+        if let Some(ch) = picked {
+            self.insert(ctx, &ch.to_string());
+            self.selection_tools = None;
+            // Insertion collapses the selection; don't recreate formatting on its old range.
+            self.seen_selection = self.selection(ctx).map(|range| (selection.doc_id, range));
+        }
     }
 
     fn primary_text(&mut self) -> Option<String> {
@@ -1602,6 +1858,23 @@ impl App {
 
     fn run(&mut self, ctx: &Context, a: Action) {
         match a {
+            Action::Emoji if !self.has_modal() => {
+                if let Some(mut selection) = self.editor_selection {
+                    // Shortcuts run before this frame's editor layout. Read the
+                    // live cursor state, which Undo/programmatic selection may have changed.
+                    if let Some(range) = self.selection(ctx) {
+                        selection.range = range;
+                    }
+                    self.selection_tools = Some(SelectionTools {
+                        selection,
+                        emoji: true,
+                        query: String::new(),
+                        focus_search: true,
+                        rect: Rect::NOTHING,
+                    });
+                    self.seen_selection = Some(selection.key());
+                }
+            }
             Action::New => self.new_doc(),
             Action::Open => {
                 let mut dlg = rfd::FileDialog::new()
@@ -1773,13 +2046,13 @@ impl App {
                 };
                 let (galley, decos) = if doc.syntax.is_none() {
                     md::build(&doc.text, None, COLUMN, &look, 1.0, &mut image_size, &mut |job| {
-                        ctx.fonts_mut(|f| f.layout_job(job))
+                        crate::emoji::layout(ctx.fonts_mut(|f| f.layout_job(job)))
                     })
                 } else {
                     let mut job =
                         egui::text::LayoutJob::simple(doc.text.clone(), FontId::monospace(10.0), md::TEXT, COLUMN);
                     job.break_on_newline = true;
-                    (ctx.fonts_mut(|f| f.layout_job(job)), vec![])
+                    (crate::emoji::layout(ctx.fonts_mut(|f| f.layout_job(job))), vec![])
                 };
                 page_breaks = crate::printing::breaks(&galley);
                 let painter = ctx
@@ -1868,6 +2141,7 @@ impl App {
                 ui.separator();
                 item(ui, acts, t("Find/Replace"), Action::Find);
                 item(ui, acts, t("Insert image…"), Action::Insert);
+                item(ui, acts, t("Insert emoji…"), Action::Emoji);
                 ui.separator();
                 item(ui, acts, t("Preferences…"), Action::Preferences);
             });
@@ -1951,6 +2225,8 @@ impl App {
     fn editor(&mut self, ui: &mut Ui) -> (Option<String>, Option<usize>) {
         let lang = self.cfg.lang;
         let ctx = ui.ctx().clone();
+        self.editor_selection = None;
+        let popup_selection = self.selection_tools.as_ref().filter(|tools| tools.emoji).map(|tools| tools.selection);
         let Some(doc) = self.docs.get_mut(self.active) else {
             ui.centered_and_justified(|ui| {
                 ui.label(
@@ -2022,7 +2298,9 @@ impl App {
         {
             self.syntax_worker = Some(highlight::Worker::new(ctx.clone()));
         }
-        let Self { docs, active, images, cfg, find, scroll_to, scroll_pending, syntax_worker, .. } = self;
+        let Self {
+            docs, active, images, cfg, find, scroll_to, scroll_pending, syntax_worker, editor_selection, ..
+        } = self;
         let doc = &mut docs[*active];
         let id = doc.edit_id();
         let dir = doc.dir();
@@ -2101,7 +2379,7 @@ impl App {
                         if let Some(c) = cache.as_ref().filter(|c| c.key == key) {
                             return c.galley.clone();
                         }
-                        let mut layout = |job| ui.ctx().fonts_mut(|f| f.layout_job(job));
+                        let mut layout = |job| crate::emoji::layout(ui.ctx().fonts_mut(|f| f.layout_job(job)));
                         let (galley, decos) = match syntax {
                             Some(_) => (
                                 highlight::build_spans(
@@ -2145,6 +2423,24 @@ impl App {
                         .lock_focus(true)
                         .layouter(&mut layouter)
                         .show(ui);
+                    let endpoints = popup_selection
+                        .filter(|selection| selection.doc_id == doc.id)
+                        .map(|selection| selection.range)
+                        .or_else(|| {
+                            out.cursor_range.map(|range| {
+                                (
+                                    range.primary.index.0.min(range.secondary.index.0),
+                                    range.primary.index.0.max(range.secondary.index.0),
+                                )
+                            })
+                        });
+                    if let Some((a, b)) = endpoints {
+                        *editor_selection = Some(EditorSelection {
+                            doc_id: doc.id,
+                            range: (a, b),
+                            anchor: out.galley.pos_from_cursor(CCursor::new(b)).translate(out.galley_pos.to_vec2()).min,
+                        });
+                    }
                     // While a drag-selection runs, egui ignores the wheel and does not scroll toward a
                     // pointer that left the view, so both are done here (see `scroll_pending` below).
                     if ctx.dragged_id() == Some(id) {
@@ -2640,6 +2936,7 @@ struct DecoCx<'a> {
 fn paint_decos(cx: &DecoCx, decos: &[Deco], bgs: &mut Vec<Shape>) -> DecoEvents {
     let at = |ci: usize| cx.galley.pos_from_cursor(CCursor::new(ci)).translate(cx.pos.to_vec2());
     let mut events = DecoEvents::default();
+    crate::emoji::paint(cx.ctx, cx.painter, cx.galley, cx.pos);
     for d in decos {
         match d {
             Deco::Code(a, b) => {
@@ -2672,6 +2969,7 @@ fn paint_decos(cx: &DecoCx, decos: &[Deco], bgs: &mut Vec<Shape>) -> DecoEvents 
                 };
                 let pos = pos2(x, r.center().y - size.y / 2.0);
                 cx.painter.galley(pos, galley.clone(), md::TEXT);
+                crate::emoji::paint(cx.ctx, cx.painter, galley, pos);
                 if *boxed {
                     let pad = if *display { vec2(12.0, 8.0) } else { vec2(4.0, 1.0) };
                     let frame = Rect::from_min_size(pos, size).expand2(pad);
@@ -2786,6 +3084,7 @@ fn paint_table(
                 };
                 let pos = pos2(gx, cell.center().y - g.size().y / 2.0);
                 painter.galley(pos, g.clone(), md::TEXT);
+                crate::emoji::paint(cx.ctx, painter, g, pos);
                 for link in &row.links[c] {
                     if let Deco::Link { start, end, url } = link
                         && link_hit(cx, g, pos, *start, *end)
@@ -3080,9 +3379,12 @@ impl eframe::App for App {
                 }
             }
         }
+        self.dismiss_selection_tools(&ctx);
         let modal_open = self.has_modal();
+        let searching = self.selection_tools.as_ref().is_some_and(|tools| tools.emoji)
+            && ctx.memory(|memory| memory.has_focus(Id::new(EMOJI_SEARCH_ID)));
         let mut acts = vec![];
-        if !modal_open {
+        if !modal_open && !searching {
             for &(m, k, a) in shortcuts() {
                 if ctx.input_mut(|i| i.consume_shortcut(&KeyboardShortcut::new(m, k))) {
                     acts.push(a);
@@ -3092,10 +3394,12 @@ impl eframe::App for App {
         for a in acts.drain(..) {
             self.run(&ctx, a);
         }
-        if !modal_open {
+        if !modal_open && !searching {
             self.list_keys(&ctx);
         }
-        self.detect_image_paste(&ctx);
+        if !searching {
+            self.detect_image_paste(&ctx);
+        }
         let zoom = ctx.input(|i| i.zoom_delta());
         if zoom != 1.0 && !modal_open {
             self.cfg.size = ((self.cfg.size * zoom * 2.0).round() / 2.0).clamp(8.0, 48.0);
@@ -3131,9 +3435,6 @@ impl eframe::App for App {
         Panel::top("tabs")
             .frame(egui::Frame::NONE.fill(CHROME).inner_margin(Margin { left: 6, right: 6, top: 4, bottom: 0 }))
             .show(ui, |ui| self.tabs(ui));
-        Panel::top("formatting")
-            .frame(egui::Frame::NONE.fill(CHROME).inner_margin(Margin::symmetric(8, 5)))
-            .show(ui, |ui| self.formatting_bar(ui, &mut acts));
         let (link, middle) = CentralPanel::default()
             .frame(egui::Frame::NONE.fill(md::BG).inner_margin(Margin::symmetric(8, 4)))
             .show(ui, |ui| self.editor(ui))
@@ -3149,6 +3450,7 @@ impl eframe::App for App {
             self.run(&ctx, Action::PastePrimary);
         }
         self.sync_primary(&ctx);
+        self.selection_popup(&ctx, &mut acts);
         self.modals(&ctx);
         for a in acts {
             self.run(&ctx, a);
@@ -3308,16 +3610,274 @@ mod tests {
         std::fs::remove_dir_all(dir).unwrap();
     }
 
+    fn popup_output(app: &mut App, ctx: &Context, events: Vec<Event>) -> egui::FullOutput {
+        let mut ef = eframe::Frame::_new_kittest();
+        let mut output = ctx.run_ui(
+            RawInput {
+                events,
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| app.ui(ui, &mut ef),
+        );
+        output.textures_delta.clear();
+        output
+    }
+
+    fn click_at(app: &mut App, ctx: &Context, pos: Pos2) {
+        for pressed in [true, false] {
+            frame(
+                app,
+                ctx,
+                vec![
+                    Event::PointerMoved(pos),
+                    Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+    }
+
     #[test]
-    fn clicking_toolbar_keeps_editor_selection() {
+    fn selection_popup_is_contextual_anchored_and_dismissed_until_reselection() {
+        let text = format!("{}hello world", "line\n".repeat(12));
+        let (mut app, ctx) = app_with(&text);
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_none());
+        app.set_selection(&ctx, 60, 65);
+        frame(&mut app, &ctx, vec![]);
+        let output = popup_output(&mut app, &ctx, vec![]);
+        let tools = app.selection_tools.as_ref().unwrap();
+        assert!(!tools.emoji);
+        let rects = tool_rects(&output, tools.rect, TOOL_BUTTON);
+        assert_eq!(rects.len(), formatting_buttons().len());
+        assert!(((rects[0].left() - tools.rect.left()) - (tools.rect.right() - rects[3].right())).abs() < 1.0);
+        assert!(rects.iter().all(|rect| (rect.width() - rect.height()).abs() < 0.1));
+        assert!((tools.rect.left() - tools.selection.anchor.x).abs() < 2.0);
+        assert!((tools.rect.bottom() - (tools.selection.anchor.y - 6.0)).abs() < 2.0);
+        let mut rows = std::collections::BTreeMap::new();
+        for shape in &output.shapes {
+            if let Shape::Text(text) = &shape.shape
+                && ["B", "I", "S", "<>", "P", "H1", "H2", "H3"].contains(&text.galley.job.text.as_str())
+            {
+                *rows.entry(text.pos.y.round() as i32).or_insert(0) += 1;
+            }
+        }
+        assert!(rows.values().all(|count| *count <= TOOL_COLUMNS));
+        click_at(&mut app, &ctx, pos2(8.0, 400.0));
+        assert!(app.selection_tools.is_none());
+        assert_eq!(app.selection(&ctx), Some((60, 65)));
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_none());
+        app.set_selection(&ctx, 60, 66);
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_some());
+        frame(&mut app, &ctx, vec![key(Key::Escape, Modifiers::NONE)]);
+        assert!(app.selection_tools.is_none());
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_none());
+        app.set_selection(&ctx, 61, 67);
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_some());
+        app.about = true;
+        frame(&mut app, &ctx, vec![]);
+        frame(&mut app, &ctx, vec![key(Key::Escape, Modifiers::NONE)]);
+        assert!(!app.about);
+        assert!(app.selection_tools.is_none());
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_none());
+        app.set_selection(&ctx, 62, 68);
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_some());
+        app.docs[0].set_syntax(SyntaxMode::Language(Syntax::Html));
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_none());
+        app.new_doc();
+        frame(&mut app, &ctx, vec![]);
+        assert!(app.selection_tools.is_none());
+    }
+
+    fn emoji_tiles(output: &egui::FullOutput, ctx: &Context) -> Vec<(char, Rect)> {
+        let textures: HashMap<_, _> = ctx.data(|data| {
+            crate::emoji::characters()
+                .iter()
+                .filter_map(|ch| data.get_temp::<TextureHandle>(Id::new(("color_emoji", *ch))).map(|t| (t.id(), *ch)))
+                .collect()
+        });
+        output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                Shape::Mesh(mesh) => textures.get(&mesh.texture_id).map(|ch| (*ch, mesh.calc_bounds())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn tool_rects(output: &egui::FullOutput, popup: Rect, button_size: Vec2) -> Vec<Rect> {
+        output
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                Shape::Rect(rect)
+                    if popup.contains_rect(rect.rect) && (rect.rect.size() - button_size).length() < 0.1 =>
+                {
+                    Some(rect.rect)
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn larger_emoji_popup_scrolls_and_inserts_unicode_with_undo() {
+        let text = format!("{}Zażółć", "line\n".repeat(12));
+        let (mut app, ctx) = app_with(&text);
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 60, 66);
+        frame(&mut app, &ctx, vec![]);
+        frame(&mut app, &ctx, vec![]);
+        let format_rect = app.selection_tools.as_ref().unwrap().rect;
+        let output = popup_output(&mut app, &ctx, vec![key(Key::Backtick, Modifiers::COMMAND | Modifiers::SHIFT)]);
+        let tools = app.selection_tools.as_ref().unwrap();
+        assert!(tools.emoji);
+        assert!(tools.rect.width() > format_rect.width());
+        assert!(tools.rect.height() > format_rect.height());
+        assert!((tools.rect.left() - format_rect.left()).abs() < 1.0);
+        assert!((tools.rect.bottom() - format_rect.bottom()).abs() < 1.0);
+        let first = crate::emoji::characters()[0].to_string();
+        let tiles = emoji_tiles(&output, &ctx);
+        let button = tiles.iter().find(|(ch, _)| ch.to_string() == first).expect("first emoji is visible").1.center();
+        assert!(tiles.len() < crate::emoji::characters().len());
+        let rects = tool_rects(&output, tools.rect, EMOJI_BUTTON);
+        assert!(rects.len() >= 8);
+        for row in rects.chunks(TOOL_COLUMNS).take(2) {
+            assert!(row.iter().all(|rect| (rect.top() - row[0].top()).abs() < 0.1));
+        }
+        let left = rects[0].left() - tools.rect.left();
+        let right = tools.rect.right() - rects[TOOL_COLUMNS - 1].right();
+        assert!((left - right).abs() < 1.0, "unequal margins: {left} / {right}");
+        click_at(&mut app, &ctx, button);
+        assert_eq!(app.docs[0].text, format!("{}{first}", "line\n".repeat(12)));
+        assert_eq!(app.selection(&ctx), Some((61, 61)));
+        assert!(app.selection_tools.is_none());
+        app.run(&ctx, Action::Undo);
+        assert_eq!(app.docs[0].text, text);
+        app.set_selection(&ctx, 60, 60);
+        frame(&mut app, &ctx, vec![key(Key::Backtick, Modifiers::COMMAND)]);
+        assert!(app.selection_tools.as_ref().is_some_and(|tools| tools.emoji));
+        let popup = app.selection_tools.as_ref().unwrap().rect;
+        frame(&mut app, &ctx, vec![Event::PointerMoved(popup.center())]);
+        frame(
+            &mut app,
+            &ctx,
+            vec![Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                phase: egui::TouchPhase::Move,
+                delta: vec2(0.0, -240.0),
+                modifiers: Modifiers::NONE,
+            }],
+        );
+        for _ in 0..8 {
+            frame(&mut app, &ctx, vec![]);
+        }
+        let scrolled = popup_output(&mut app, &ctx, vec![]);
+        let tiles = emoji_tiles(&scrolled, &ctx);
+        assert!(!tiles.iter().any(|(ch, _)| ch.to_string() == first));
+        let (chosen, position) = tiles
+            .iter()
+            .find(|(_, rect)| popup.shrink(20.0).contains(rect.center()))
+            .map(|(ch, rect)| (ch.to_string(), rect.center()))
+            .expect("scrolled emoji is visible");
+        click_at(&mut app, &ctx, position);
+        assert_eq!(app.docs[0].text, format!("{}{chosen}Zażółć", "line\n".repeat(12)));
+        app.run(&ctx, Action::Undo);
+        assert_eq!(app.docs[0].text, text);
+        frame(&mut app, &ctx, vec![key(Key::Backtick, Modifiers::COMMAND)]);
+        frame(&mut app, &ctx, vec![key(Key::Escape, Modifiers::NONE)]);
+        assert!(app.selection_tools.is_none());
+    }
+
+    #[test]
+    fn emoji_search_filters_live_without_editing_the_source_selection() {
+        let text = format!("{}Zażółć", "line\n".repeat(12));
+        let (mut app, ctx) = app_with(&text);
+        app.cfg.lang = Lang::Polish;
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 60, 66);
+        frame(&mut app, &ctx, vec![]);
+        frame(&mut app, &ctx, vec![key(Key::Backtick, Modifiers::COMMAND)]);
+        let output = popup_output(&mut app, &ctx, vec![]);
+        assert!(ctx.memory(|memory| memory.has_focus(Id::new(EMOJI_SEARCH_ID))));
+        let popup = app.selection_tools.as_ref().unwrap().rect;
+        let search = ctx.read_response(Id::new(EMOJI_SEARCH_ID)).unwrap().rect;
+        assert!((search.width() - emoji_content_size().x).abs() < 1.0);
+        let buttons = tool_rects(&output, popup, EMOJI_BUTTON);
+        assert!(search.bottom() < buttons[0].top());
+        assert!((search.left() - buttons[0].left()).abs() < 1.0);
+        let undo = app.docs[0].undo.clone();
+        frame(&mut app, &ctx, vec![Event::Text("SeRcE".into())]);
+        let filtered = popup_output(&mut app, &ctx, vec![]);
+        assert_eq!(app.selection_tools.as_ref().unwrap().query, "SeRcE");
+        let tiles = emoji_tiles(&filtered, &ctx);
+        let matches = crate::emoji::search("serce", Lang::Polish);
+        assert!(!tiles.is_empty());
+        assert!(tiles.iter().all(|(ch, _)| matches.contains(ch)));
+        for key_event in [key(Key::B, Modifiers::COMMAND), key(Key::Enter, Modifiers::NONE)] {
+            frame(&mut app, &ctx, vec![key_event]);
+            assert_eq!(app.docs[0].text, text);
+            assert_eq!(app.selection_tools.as_ref().unwrap().selection.range, (60, 66));
+        }
+        let empty = popup_output(
+            &mut app,
+            &ctx,
+            vec![key(Key::A, Modifiers::COMMAND), Event::Text("no_such_emoji_92329".into())],
+        );
+        assert!(emoji_tiles(&empty, &ctx).is_empty());
+        assert!(
+            empty
+                .shapes
+                .iter()
+                .any(|s| matches!(&s.shape, Shape::Text(t) if t.galley.job.text == "Nie znaleziono emoji"))
+        );
+        assert_eq!(app.selection_tools.as_ref().unwrap().rect, popup);
+        assert_eq!(app.docs[0].undo, undo);
+        let output =
+            popup_output(&mut app, &ctx, vec![key(Key::A, Modifiers::COMMAND), Event::Text("czerwone serce".into())]);
+        let heart = emoji_tiles(&output, &ctx)
+            .into_iter()
+            .find(|(ch, _)| *ch == '❤')
+            .expect("matching heart is visible")
+            .1
+            .center();
+        click_at(&mut app, &ctx, heart);
+        assert_eq!(app.docs[0].text, format!("{}❤", "line\n".repeat(12)));
+        assert!(app.selection_tools.is_none());
+        app.run(&ctx, Action::Undo);
+        assert_eq!(app.docs[0].text, text);
+        frame(&mut app, &ctx, vec![key(Key::Backtick, Modifiers::COMMAND)]);
+        assert!(app.selection_tools.as_ref().unwrap().query.is_empty());
+        frame(&mut app, &ctx, vec![key(Key::Escape, Modifiers::NONE)]);
+        assert!(app.selection_tools.is_none());
+        assert!(ctx.memory(|memory| memory.has_focus(app.docs[0].edit_id())));
+    }
+
+    #[test]
+    fn clicking_selection_tools_keeps_editor_selection() {
         let (mut app, ctx) = app_with("hello world");
         frame(&mut app, &ctx, vec![]);
         app.set_selection(&ctx, 0, 5);
+        frame(&mut app, &ctx, vec![]);
         let mut ef = eframe::Frame::_new_kittest();
         let mut output = ctx.run_ui(
             RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 800.0))), ..Default::default() },
             |ui| app.ui(ui, &mut ef),
         );
+        output.textures_delta.clear();
         let button = output
             .shapes
             .iter()
@@ -3346,7 +3906,7 @@ mod tests {
     }
 
     #[test]
-    fn toolbar_covers_all_formatting_and_numbered_lists() {
+    fn selection_tools_cover_all_formatting_and_numbered_lists() {
         let buttons = formatting_buttons();
         for (_, _, action) in shortcuts() {
             if matches!(action, Action::Fmt(_) | Action::Insert | Action::NewPage) {
@@ -3846,7 +4406,7 @@ mod tests {
     #[test]
     fn pdf_exports_unsaved_unicode_tables_and_multiple_pages_without_editing() {
         let source = format!(
-            "# Zażółć gęślą jaźń\n\n**Pogrubienie** i *kursywa*\n\n| Kolumna | Wartość |\n| --- | --- |\n| Szukaj | Żółw |\n\n- punkt\n- [x] gotowe\n\n> cytat\n\n```rust\nlet x = 42;\n```\n\n{}",
+            "# Zażółć gęślą jaźń 😀 ❤\n\n**Pogrubienie** i *kursywa*\n\n| Kolumna | Wartość |\n| --- | --- |\n| Szukaj | Żółw |\n\n- punkt\n- [x] gotowe\n\n> cytat\n\n```rust\nlet x = 42;\n```\n\n{}",
             (0..160).map(|i| format!("Wiersz{i:03} przeszukiwalny tekst\n")).collect::<String>()
         );
         let source = format!("{source}\n![icon]({}/assets/icon.png)\n", env!("CARGO_MANIFEST_DIR"));
@@ -3874,6 +4434,8 @@ mod tests {
                 assert!(output.status.success());
                 let text = String::from_utf8(output.stdout).unwrap();
                 assert!(text.contains("Zażółć gęślą jaźń"), "{text}");
+                assert_eq!(text.matches('😀').count(), 1, "emoji text layer must remain searchable");
+                assert_eq!(text.matches('❤').count(), 1, "symbol text layer must remain searchable");
                 assert!(text.contains("Kolumna") && text.contains("Żółw"), "{text}");
                 assert!(!text.contains("**") && !text.contains("```"));
                 for i in 0..160 {

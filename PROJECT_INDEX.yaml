@@ -25,6 +25,7 @@ navigation:
     symbols: [prefix, Prefix, ListMarker, INDENT_SPACES, indent_level, prefix_key, Fence, front_matter_end]
   src/files.rs: [file_browser, file_name, create_empty]
   src/fonts.rs: embedded_and_system_fonts
+  src/emoji.rs: [characters, png, texture, layout, paint, paint_character, annotations, name, search]
   src/printing.rs: [pdf, breaks, print, unicode_font_embedding, native_print_portal]
   src/i18n.rs: translated_ui_strings
   src/base64.rs: embedded_image_codec
@@ -62,7 +63,7 @@ list_editing:
     - inserting_and_deleting_numbered_items_updates_following_numbers
     - empty_bullet_height_and_continuation_indent_are_stable
   test_harness: 'egui headless run_ui outputs must clear textures_delta; texture tests declare max_texture_side'
-last_verification: {tests: 84, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
+last_verification: {tests: 90, result: passed, commands: ["cargo test --offline", "cargo fmt --check", "git diff --check", "cargo clippy --offline --all-targets -- -D warnings", "cargo build --release --offline"]}
 deployment:
   desktop_launcher: /home/adam/.local/share/applications/mdedit.desktop
   executable: target/release/mdedit
@@ -76,20 +77,20 @@ review_fixes:
   replacement: 'replace_one uses insert; replace_all uses App.checkpoint so normalization and replacement share undo history'
   tests: [replacement_keeps_numbering_and_undo_together, shift_tab_reverses_one_rendered_indentation_level]
 release_workflow:
-  current_version: 0.1.9
+  current_version: 0.1.10
   repository: ordigital/mdeditor
   branch: master
-  tag: v0.1.9
-  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.9
+  tag: v0.1.10
+  release_url: https://github.com/ordigital/mdeditor/releases/tag/v0.1.10
   instructions: packaging/RELEASING.md
-  notes: packaging/release-notes-0.1.9.md
-  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.9-x86_64.AppImage}
-  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.9-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE]}
+  notes: packaging/release-notes-0.1.10.md
+  linux: {script: packaging/build-appimage.sh, build: 'KEEP_BUILD=1 sh packaging/build-appimage.sh', base: 'Docker ubuntu:22.04', glibc_minimum: '2.35', artifact: releases/MDEdit-0.1.10-x86_64.AppImage}
+  windows: {script: packaging/build-windows.sh, target: x86_64-pc-windows-gnu, compiler: x86_64-w64-mingw32-gcc, artifact: releases/MDEdit-0.1.10-windows-x86_64.zip, contents: [MDEdit.exe, LICENSE, licenses/]}
   checksums: 'Both packages have basename.sha256 sidecars with relative filenames; verify from releases/.'
   publication: 'Annotated v<version> tag; atomic push of master and tag; gh release create --verify-tag --notes-file with two packages and two SHA-256 files.'
   caches: [releases/build/target, 'Docker volume mdedit-cargo', 'Docker volume mdedit-rustup']
   requirements: 'Docker daemon running and socket accessible, appimagetool, MinGW-w64, Rust Windows GNU target, Python >=3.11, gh authentication, GitHub SSH access.'
-  validation: '80 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.9.'
+  validation: '90 tests; fmt; Clippy -D warnings; package CRC/content; SHA-256; Linux max GLIBC_2.35; Windows DLL imports. Windows/Wine runtime not tested for 0.1.10.'
   git_policy: 'releases/ is ignored; commit source/index/scripts/notes and version bump, upload binaries as GitHub release assets; never force-push existing tags.'
 linked_pages_and_toolbar:
   status: 'Included in release v0.1.7.'
@@ -99,13 +100,13 @@ linked_pages_and_toolbar:
   filename: 'Selection prefills name; append .md unless .md/.markdown supplied; only a single valid filename; create_new prevents overwrite.'
   source: 'Store document ID, character selection and original text; verify unchanged source before creating file; insert link as one undo step. Undo removes link but keeps created file.'
   links: 'Escape label backslashes/brackets; percent-encode destination UTF-8 bytes. md.decode_path decodes once in app.resolve after fragment splitting; md.parse_link handles escaped/nested label brackets.'
-  toolbar: 'Panel.top(formatting) directly below tabs with CHROME menu background; centered rows of 36x28 buttons, wrapping by available width; translated tooltips and shortcuts; disabled for config files/no document/modals.'
-  actions: 'formatting_buttons routes existing actions: bold, italic, strike, inline code, highlight, link, new linked page, normal text, H1-H6, bullet/ordered/task lists, quote, image.'
+  toolbar: 'Original fixed bar replaced by App.selection_popup; shared formatting_buttons/formatting_button registry renders four 26x26 buttons per row, with translated tooltips and shortcuts. Automatic popup is for nonempty Markdown selections; hidden for source files/no document/modals.'
+  actions: 'formatting_buttons routes existing actions: normal text (P) first, bold, italic, strike, inline code, highlight, link, new linked page, H1-H6, bullet/ordered/task lists, quote, image.'
   numbered_format: 'Fmt.Ordered + toggle_line adds/removes markers; checkpoint numbering normalizes selected lines.'
   localization: 'New linked page, Invalid file name and Numbered list added to all 22 non-English tables; English uses source keys.'
-  icon_rendering: "formatting_button draws highlight, links, bullet/ordered lists, checkbox, quote and image as painter geometry; remaining labels use ASCII. Highlight is a filled neutral rectangle without colored background."
+  icon_rendering: "formatting_button draws highlight, links, bullet/ordered lists, checkbox, quote and image as painter geometry; remaining labels use ASCII. Highlight uses an outlined diagonal marker with a filled chisel tip and an underline. Link uses two diagonal chain links; new linked page uses the same chain with a plus."
   continuation_indent: "Shift+Enter appends exactly two spaces after the original prefix for bullets, ordered lists and tasks at every nesting level; repeated breaks do not accumulate indentation."
-  regression_tests: [shift_enter_uses_one_compact_step_for_tasks_and_nested_lists, linked_page_shortcut_enter_creates_file_and_followable_link, linked_page_preserves_existing_files_and_rejects_paths, linked_page_uses_browser_folder_for_unsaved_document, toolbar_covers_all_formatting_and_numbered_lists, clicking_toolbar_keeps_editor_selection]
+  regression_tests: [shift_enter_uses_one_compact_step_for_tasks_and_nested_lists, linked_page_shortcut_enter_creates_file_and_followable_link, linked_page_preserves_existing_files_and_rejects_paths, linked_page_uses_browser_folder_for_unsaved_document, selection_tools_cover_all_formatting_and_numbered_lists, clicking_selection_tools_keeps_editor_selection]
 quote_indentation:
   formatting: 'src/app.rs:toggle_line(Fmt.Quote) adds/removes > after existing whitespace; never moves indentation inside the quote.'
   layout: 'src/md.rs:line recognizes whitespace before > and stores its visual nesting steps in Deco.Quote.indent; text/wrapped rows include indent plus quote depth.'
@@ -116,7 +117,7 @@ dry_kiss_refactor:
   indentation: 'INDENT_SPACES=2 governs tab width, visual levels, canonical numbering keys, Shift+Enter and Shift+Tab. Canonical keys exclude syntactic spaces after > and preserve nesting before/after quote markers.'
   block_boundaries: 'Fence stores marker and full opening length; closes only on the same marker with at least that length. Rendering/numbering share Fence and front_matter_end; closed YAML headers accept --- or ..., unclosed --- remains normal Markdown.'
   files: 'files.file_name validates a single trimmed filename for both creation dialogs; files.create_empty uses create_new to prevent overwrite. Browser retains existing extensions; linked Markdown pages append .md as before.'
-  toolbar: 'formatting_buttons returns a static slice; vector icons have empty text labels; ASCII text buttons retain labels. No per-frame Vec allocation.'
+  toolbar: 'formatting_buttons returns a static slice; vector icons have empty text labels; ASCII text buttons retain labels. The registry needs no per-frame allocation; vector glyph paths use small point vectors.'
   modals: 'App.has_modal is the shared gate for formatting buttons and editor keyboard shortcuts.'
   tests: [prefixes_share_visual_indentation_and_marker_boundaries, code_fences_require_matching_character_and_at_least_opening_length, front_matter_requires_a_closing_delimiter, file_names_are_portable_single_components, numbering_and_layout_agree_on_odd_indents_and_long_fences, browser_creation_reuses_filename_validation_and_never_overwrites]
 bash_highlighting:
@@ -239,3 +240,29 @@ printing_and_pdf:
   limitations: 'Native dialogs and physical printing not exercised headlessly. Fixed A4 independent of printer options; no syntax colors, PDF link annotations or page headers. Rows taller than a page can split; complex scripts inherit the editor glyph layout. Missing font glyphs report an error. Other platforms open the PDF viewer.'
   tests: [pdf_exports_unsaved_unicode_tables_and_multiple_pages_without_editing, pdf_handles_empty_and_source_documents, printing_actions_are_translated_in_every_language, print_and_export_shortcuts_do_not_trigger_inline_code]
   verification: 'PDF regression optionally uses installed pdftotext to verify Polish Unicode/table extraction, hidden Markdown markers and exactly one copy of each row across pages. Manual pdfinfo/pdfimages/pdftoppm check confirms A4, embedded image and readable formatting. cargo check --offline --target x86_64-pc-windows-gnu passes.'
+
+selection_tools_and_emoji:
+  implementation: 'src/app.rs: EditorSelection/SelectionTools, App.editor/selection_popup/dismiss_selection_tools, formatting_grid, tool_content_size, Action.Emoji; src/emoji.rs: characters'
+  visibility: 'Remove fixed Panel.top(formatting). Nonempty Markdown selections open tools after drag release or keyboard selection; empty selection, source syntax, another tab or a modal hides formatting. Single pointer press anywhere outside closes without swallowing the click. Escape also closes. seen_selection prevents reopening unchanged dismissed selections; dragging a fresh selection resets it.'
+  geometry: 'Four columns with 3pt gaps and equal 8pt frame padding. Formatting keeps strict 26x26 cells, 12pt labels and five rows. Emoji uses larger 36x36 cells (28pt images), six visible rows and a full-width 28pt search input above them. Separate fixed content sizes keep results/empty state from resizing the window. Top-left Area placement derived from the preferred bottom-left anchor avoids size-change pivot drift. Emoji scrollbars float in the right frame padding; no extra right content gutter. Painter-centered bitmap emoji cannot change row height or shift grid columns. Frame.popup with CHROME fill matches existing dialog frame. Preferred bottom-left anchor is 6pt above the sorted selection end, using actual TextEdit galley/screen coordinates; clamp to viewport edges if needed. Scroll/font/width changes refresh the anchor.'
+  actions: 'Formatting reuses existing actions and preserves source selection/focus. Emoji uses App.insert and its Unicode character indices/checkpoints, replaces selection or inserts at caret, closes after picking and supports Undo. Popup is a nonmodal foreground Area; other editor controls and shortcuts remain usable.'
+  emoji: 'Ctrl+~ (COMMAND + Backtick, also accepts Shift for the tilde) or translated Edit -> Insert emoji… switches the popup to a larger virtualized vertical ScrollArea with an autofocus search input. No selection required. Shortcut labels/About use the shared table. New UI string translated in all 22 non-English tables.'
+  choice: 'No new transitive dependencies. Embedded assets/NotoColorEmoji.ttf (unmodified Google Noto Color Emoji 2.057, OFL-1.1; provenance/hash in assets/NotoEmoji-README.txt) supplies CBDT PNG glyphs read by existing ttf-parser and decoded by image. Palette intersects bundled proportional cmap with available color bitmaps, deduplicates/caches with OnceLock/BTreeSet, faces first. Single-codepoint emoji/symbols only, no standalone skin modifiers or ZWJ/flag sequence catalogue.'
+  color_rendering: 'One context texture cache is shared by picker, editor and print rendering. Copy-on-write emoji.layout collapses only monochrome glyph quads (including under selection color overrides), preserving source Unicode, glyph advances, wrapping and selection backgrounds. emoji.paint overlays colored PNGs at glyph positions in prose, code, tables and formulas. PDF retains invisible Unicode text for search/copy beneath matching color images; split text runs when switching between colored emoji and ordinary text.'
+  font_distribution: 'NotoEmoji-LICENSE.txt is shipped by Windows ZIP and Linux AppImage scripts alongside existing font licenses. The embedded font works independently of system fonts on Linux/Windows.'
+  tests: [selection_popup_is_contextual_anchored_and_dismissed_until_reselection, larger_emoji_popup_scrolls_and_inserts_unicode_with_undo, clicking_selection_tools_keeps_editor_selection, selection_tools_cover_all_formatting_and_numbered_lists, palette_uses_bundled_glyphs_and_contains_common_emoji, color_glyphs_preserve_text_and_font_cache]
+
+emoji_search:
+  implementation: 'src/app.rs: SelectionTools.query/focus_search, emoji_content_size, EMOJI_BUTTON/EMOJI_SEARCH_ID, App.selection_popup/editor/ui; src/emoji.rs: annotations/name/search'
+  data: 'assets/emoji-search.tsv.gz contains Unicode CLDR release-48 short names and search keywords for all 23 Lang codes; assets/Unicode-LICENSE.txt and assets/EmojiSearch-README.txt record license/provenance. Existing flate2 (already in image dependency graph) is now direct to inflate the approximately 1 MB embedded index once; no new transitive crate or runtime network access.'
+  matching: 'Case-insensitive substring matching, all whitespace-separated query words required; current UI language plus English fallback; generated terms include accent-free spellings. Direct emoji queries accept a variation selector. Empty query shows all supported color emoji; no matches shows a translated empty state; localized names are button tooltips.'
+  editing: 'Autofocus search on open, clear query on reopen, filter every input change and reset scroll to top. Disable editor shortcuts/list keys/image paste while search owns focus. A stable source selection snapshot survives TextEdit losing focus; click inserts into that original Unicode range through App.insert/undo. Escape/outside dismissal restores the source selection; outside pointer actions still propagate normally.'
+  maintenance: 'python3 tools/update_emoji_search.py downloads pinned CLDR annotation XML/LICENSE using only Python stdlib, derives language codes from src/i18n.rs, generates deterministic gzip. Run only to refresh vendored data, never during builds. Existing package license globs include Unicode-LICENSE.txt automatically.'
+  localization: 'Search emoji… and No emoji found translated in all 22 non-English tables; English source keys. All 23 locales have CLDR metadata and continue to accept English queries.'
+  tests: [search_matches_localized_keywords_english_and_emoji, emoji_search_filters_live_without_editing_the_source_selection, larger_emoji_popup_scrolls_and_inserts_unicode_with_undo]
+
+release_0_1_10_validation:
+  checks: '90 passed, 3 manual benchmarks ignored; fmt, diff check, Clippy -D warnings; fresh local release build; Docker Ubuntu 22.04 AppImage; MinGW Windows ZIP.'
+  artifacts: {appimage_bytes: 23878136, windows_zip_bytes: 21294830}
+  integrity: 'Both SHA-256 sidecars verified; ZIP CRC/content and archived EXE equality verified; bundled font/data licenses verified in both packages; ELF max GLIBC_2.35; PE imports contain system DLLs only.'
+  limitations: 'Native printing, interactive desktop and Windows/Wine runtime not tested.'

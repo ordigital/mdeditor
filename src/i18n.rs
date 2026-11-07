@@ -228,6 +228,9 @@ Copy|Kopiuj
 Paste|Wklej
 Find/Replace|Znajdź/Zamień
 Insert image…|Wstaw obraz…
+Insert emoji…|Wstaw emoji…
+Search emoji…|Szukaj emoji…
+No emoji found|Nie znaleziono emoji
 View|Widok
 Syntax|Składnia
 Automatic|Automatycznie
@@ -335,6 +338,9 @@ Copy|Kopieren
 Paste|Einfügen
 Find/Replace|Suchen/Ersetzen
 Insert image…|Bild einfügen…
+Insert emoji…|Emoji einfügen…
+Search emoji…|Emoji suchen…
+No emoji found|Keine Emojis gefunden
 View|Ansicht
 Syntax|Syntax
 Automatic|Automatisch
@@ -442,6 +448,9 @@ Copy|Copier
 Paste|Coller
 Find/Replace|Rechercher/remplacer
 Insert image…|Insérer une image…
+Insert emoji…|Insérer un émoji…
+Search emoji…|Rechercher un émoji…
+No emoji found|Aucun émoji trouvé
 View|Affichage
 Syntax|Syntaxe
 Automatic|Automatique
@@ -549,6 +558,9 @@ Copy|Копировать
 Paste|Вставить
 Find/Replace|Поиск/замена
 Insert image…|Вставить изображение…
+Insert emoji…|Вставить эмодзи…
+Search emoji…|Поиск эмодзи…
+No emoji found|Эмодзи не найдены
 View|Вид
 Syntax|Синтаксис
 Automatic|Автоматически
@@ -656,6 +668,9 @@ Copy|Копіювати
 Paste|Вставити
 Find/Replace|Пошук/заміна
 Insert image…|Вставити зображення…
+Insert emoji…|Вставити емодзі…
+Search emoji…|Пошук емодзі…
+No emoji found|Емодзі не знайдено
 View|Вигляд
 Syntax|Синтаксис
 Automatic|Автоматично
@@ -763,6 +778,9 @@ Copy|Kopírovat
 Paste|Vložit
 Find/Replace|Najít/nahradit
 Insert image…|Vložit obrázek…
+Insert emoji…|Vložit emoji…
+Search emoji…|Hledat emoji…
+No emoji found|Žádné emoji nenalezeny
 View|Zobrazení
 Syntax|Syntaxe
 Automatic|Automaticky
@@ -870,6 +888,9 @@ Copy|Kopírovať
 Paste|Vložiť
 Find/Replace|Hľadať/nahradiť
 Insert image…|Vložiť obrázok…
+Insert emoji…|Vložiť emoji…
+Search emoji…|Hľadať emoji…
+No emoji found|Nenašli sa žiadne emoji
 View|Zobrazenie
 Syntax|Syntax
 Automatic|Automaticky
@@ -977,6 +998,9 @@ Copy|Copiar
 Paste|Pegar
 Find/Replace|Buscar/reemplazar
 Insert image…|Insertar imagen…
+Insert emoji…|Insertar emoji…
+Search emoji…|Buscar emoji…
+No emoji found|No se encontraron emojis
 View|Ver
 Syntax|Sintaxis
 Automatic|Automática
@@ -1084,6 +1108,9 @@ Copy|Copiar
 Paste|Colar
 Find/Replace|Localizar/substituir
 Insert image…|Inserir imagem…
+Insert emoji…|Inserir emoji…
+Search emoji…|Buscar emoji…
+No emoji found|Nenhum emoji encontrado
 View|Exibir
 Syntax|Sintaxe
 Automatic|Automático
@@ -1191,6 +1218,9 @@ Copy|Copia
 Paste|Incolla
 Find/Replace|Trova/sostituisci
 Insert image…|Inserisci immagine…
+Insert emoji…|Inserisci emoji…
+Search emoji…|Cerca emoji…
+No emoji found|Nessuna emoji trovata
 View|Visualizza
 Syntax|Sintassi
 Automatic|Automatica
@@ -1298,6 +1328,9 @@ Copy|Másolás
 Paste|Beillesztés
 Find/Replace|Keresés/csere
 Insert image…|Kép beszúrása…
+Insert emoji…|Emoji beszúrása…
+Search emoji…|Emoji keresése…
+No emoji found|Nem található emoji
 View|Nézet
 Syntax|Szintaxis
 Automatic|Automatikus
@@ -1405,6 +1438,9 @@ Copy|Kopyala
 Paste|Yapıştır
 Find/Replace|Bul/değiştir
 Insert image…|Resim ekle…
+Insert emoji…|Emoji ekle…
+Search emoji…|Emoji ara…
+No emoji found|Emoji bulunamadı
 View|Görünüm
 Syntax|Sözdizimi
 Automatic|Otomatik
@@ -1512,6 +1548,9 @@ Copy|Copiază
 Paste|Lipește
 Find/Replace|Caută/înlocuiește
 Insert image…|Inserează imagine…
+Insert emoji…|Inserează emoji…
+Search emoji…|Caută emoji…
+No emoji found|Nu s-au găsit emoji
 View|Vizualizare
 Syntax|Sintaxă
 Automatic|Automat
@@ -1619,6 +1658,9 @@ Copy|Αντιγραφή
 Paste|Επικόλληση
 Find/Replace|Εύρεση/αντικατάσταση
 Insert image…|Εισαγωγή εικόνας…
+Insert emoji…|Εισαγωγή emoji…
+Search emoji…|Αναζήτηση emoji…
+No emoji found|Δεν βρέθηκαν emoji
 View|Προβολή
 Syntax|Σύνταξη
 Automatic|Αυτόματα
@@ -1726,6 +1768,9 @@ Copy|Kopijuoti
 Paste|Įklijuoti
 Find/Replace|Ieškoti/keisti
 Insert image…|Įterpti paveikslėlį…
+Insert emoji…|Įterpti jaustuką…
+Search emoji…|Ieškoti jaustukų…
+No emoji found|Jaustukų nerasta
 View|Rodinys
 Syntax|Sintaksė
 Automatic|Automatiškai
@@ -1833,6 +1878,9 @@ Copy|コピー
 Paste|貼り付け
 Find/Replace|検索/置換
 Insert image…|画像を挿入…
+Insert emoji…|絵文字を挿入…
+Search emoji…|絵文字を検索…
+No emoji found|絵文字が見つかりません
 View|表示
 Syntax|構文
 Automatic|自動
@@ -1940,6 +1988,9 @@ Copy|复制
 Paste|粘贴
 Find/Replace|查找/替换
 Insert image…|插入图片…
+Insert emoji…|插入表情符号…
+Search emoji…|搜索表情符号…
+No emoji found|未找到表情符号
 View|视图
 Syntax|语法
 Automatic|自动
@@ -2047,6 +2098,9 @@ Copy|העתקה
 Paste|הדבקה
 Find/Replace|חיפוש/החלפה
 Insert image…|הוספת תמונה…
+Insert emoji…|הוספת אמוג׳י…
+Search emoji…|חיפוש אמוג׳י…
+No emoji found|לא נמצאו אמוג׳י
 View|תצוגה
 Syntax|תחביר
 Automatic|אוטומטי
@@ -2154,6 +2208,9 @@ Copy|कॉपी करें
 Paste|चिपकाएँ
 Find/Replace|खोजें/बदलें
 Insert image…|चित्र डालें…
+Insert emoji…|इमोजी डालें…
+Search emoji…|इमोजी खोजें…
+No emoji found|कोई इमोजी नहीं मिला
 View|दृश्य
 Syntax|वाक्यविन्यास
 Automatic|स्वचालित
@@ -2261,6 +2318,9 @@ Copy|কপি
 Paste|পেস্ট
 Find/Replace|খুঁজুন/প্রতিস্থাপন
 Insert image…|ছবি সন্নিবেশ করুন…
+Insert emoji…|ইমোজি সন্নিবেশ করুন…
+Search emoji…|ইমোজি খুঁজুন…
+No emoji found|কোনো ইমোজি পাওয়া যায়নি
 View|দেখুন
 Syntax|সিনট্যাক্স
 Automatic|স্বয়ংক্রিয়
@@ -2368,6 +2428,9 @@ Copy|نسخ
 Paste|لصق
 Find/Replace|بحث/استبدال
 Insert image…|إدراج صورة…
+Insert emoji…|إدراج رمز تعبيري…
+Search emoji…|البحث عن رمز تعبيري…
+No emoji found|لم يتم العثور على رموز تعبيرية
 View|عرض
 Syntax|بناء الجملة
 Automatic|تلقائي
@@ -2475,6 +2538,9 @@ Copy|نقل
 Paste|چسپاں کریں
 Find/Replace|تلاش/تبدیل
 Insert image…|تصویر داخل کریں…
+Insert emoji…|ایموجی داخل کریں…
+Search emoji…|ایموجی تلاش کریں…
+No emoji found|کوئی ایموجی نہیں ملا
 View|منظر
 Syntax|نحو
 Automatic|خودکار
@@ -2588,7 +2654,9 @@ mod tests {
     #[test]
     fn printing_actions_are_translated_in_every_language() {
         for lang in Lang::ALL.into_iter().filter(|l| *l != Lang::English) {
-            for key in ["Export PDF…", "Print…", "Choose a different file"] {
+            for key in
+                ["Export PDF…", "Print…", "Choose a different file", "Insert emoji…", "Search emoji…", "No emoji found"]
+            {
                 assert_ne!(tr(lang, key), key, "{lang:?}: {key}");
             }
         }

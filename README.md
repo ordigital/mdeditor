@@ -20,7 +20,7 @@ Polish version: [README.pl.md](README.pl.md).
 - **Images**: from files, embedded as `data:` base64, `![[embeds]]`, `![alt|300](…)` widths.
   Ctrl+V with an image in the clipboard embeds it as a JPEG (85%, max 1200 px wide), or saves a WebP next to the document.
 - **Tabs, find / replace, undo / redo** (10 steps), recent files, a simple **file panel** (create, open, delete to trash).
-- A formatting toolbar below the tabs, including headings 1–6, normal text, inline styles, links, lists, tasks, quotes and images.
+- Selecting Markdown text opens formatting tools above the end of the selection, four smaller square icons per row. Click outside or press Escape to dismiss. **Ctrl+~** switches to a larger scrolling emoji picker with a full-width live search field (also available from Edit). Search names and keywords in the interface language or English, offline; without a selection it opens at the caret. Emoji use embedded Noto Color Emoji, with matching colors in the picker, document and PDF; insertion keeps ordinary Unicode text.
 - Ctrl+Shift+K creates a new Markdown file in the current document folder and links the selected text to it. Enter or Save confirms; existing files are never overwritten.
 - Formatting shortcuts that also toggle the selection (Ctrl+B, Ctrl+I, …), Ctrl+scroll zooms the font.
 - **View width**: Narrow, Medium, Wide and Full; F2 cycles between them. Narrow preserves the original reading column; Full uses the available editor width. Code files use a slightly larger font.
@@ -65,6 +65,7 @@ installs `mdedit.desktop` and the icon for the current user. On Wayland the task
 | --- | --- |
 | Print | Ctrl+P |
 | Export PDF | Ctrl+Shift+E |
+| Insert emoji | Ctrl+~ (Ctrl+Shift+` also works) |
 | New / Open / Save / Save as | Ctrl+N (Ctrl+T) / Ctrl+O / Ctrl+S / Ctrl+Shift+S |
 | Save all | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S on macOS)¹ |
 | Close / Close all / Exit | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |

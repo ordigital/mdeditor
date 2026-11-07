@@ -18,6 +18,8 @@ archive.parent.mkdir(exist_ok=True)
 with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as out:
     out.write(root / 'target/x86_64-pc-windows-gnu/release/mdedit.exe', 'MDEdit.exe')
     out.write(root / 'LICENSE', 'LICENSE')
+    for license_file in sorted((root / 'assets').glob('*LICENSE*')):
+        out.write(license_file, 'licenses/' + license_file.name)
 digest = hashlib.file_digest(archive.open('rb'), 'sha256').hexdigest()
 archive.with_name(archive.name + '.sha256').write_text(f'{digest}  {archive.name}\n')
 print(f'Built {archive}')
