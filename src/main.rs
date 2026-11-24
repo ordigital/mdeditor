@@ -7,6 +7,7 @@ mod emoji;
 mod files;
 mod fonts;
 mod highlight;
+mod html;
 mod i18n;
 mod latex;
 mod markdown;

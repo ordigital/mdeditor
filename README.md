@@ -70,7 +70,9 @@ installs `mdedit.desktop` and the icon for the current user. On Wayland the task
 | Save all | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S on macOS)¹ |
 | Close / Close all / Exit | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |
 | Undo / Redo | Ctrl+Z / Ctrl+Y, Ctrl+Shift+Z |
-| Copy / Paste (text or image) | Ctrl+C / Ctrl+V |
+| Copy / Paste (HTML converted to Markdown, text or image) | Ctrl+C / Ctrl+V |
+| Paste as plain text | Ctrl+Shift+V |
+| Page up / down (Shift extends selection) | PageUp / PageDown |
 | Paste selection (primary) | Middle click, Shift+Insert |
 | Find / Replace | Ctrl+F |
 | Insert image from file | Ctrl+Shift+I |

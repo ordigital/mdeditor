@@ -75,6 +75,7 @@ enum Action {
     CloseAll,
     Copy,
     Paste,
+    PastePlain,
     Find,
     Insert,
     Preferences,
@@ -114,6 +115,8 @@ struct SelectionTools {
 
 const TOOL_COLUMNS: usize = 4;
 const TOOL_GAP: f32 = 3.0;
+/// Height reserved for the line between formatting buttons and clipboard buttons.
+const TOOL_SEPARATOR: f32 = 5.0;
 const TOOL_BUTTON: Vec2 = Vec2::splat(26.0);
 const EMOJI_BUTTON: Vec2 = Vec2::splat(36.0);
 const EMOJI_SEARCH_HEIGHT: f32 = 28.0;
@@ -130,7 +133,7 @@ fn tool_content_size() -> Vec2 {
     let rows = formatting_buttons().len().div_ceil(TOOL_COLUMNS);
     vec2(
         TOOL_COLUMNS as f32 * (TOOL_BUTTON.x + TOOL_GAP) - TOOL_GAP,
-        rows as f32 * (TOOL_BUTTON.y + TOOL_GAP) - TOOL_GAP,
+        rows as f32 * (TOOL_BUTTON.y + TOOL_GAP) + TOOL_SEPARATOR + TOOL_GAP + TOOL_BUTTON.y,
     )
 }
 
@@ -210,6 +213,11 @@ fn formatting_buttons() -> &'static [(&'static str, &'static str, Action)] {
     ]
 }
 
+/// Clipboard buttons below the separator of the selection popup.
+fn clipboard_buttons() -> &'static [(&'static str, Action)] {
+    &[("Copy", Action::Copy), ("Paste with formatting", Action::Paste), ("Paste as plain text", Action::PastePlain)]
+}
+
 /// Allocate a strict square: text/font ascent must not resize or offset grid cells.
 fn tool_button(ui: &mut Ui, size: Vec2) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
@@ -224,6 +232,9 @@ fn formatting_button(ui: &mut Ui, icon: &str, action: Action) -> egui::Response 
         action,
         Action::Insert
             | Action::NewPage
+            | Action::Copy
+            | Action::Paste
+            | Action::PastePlain
             | Action::Fmt(Fmt::Mark | Fmt::Link | Fmt::Bullet | Fmt::Ordered | Fmt::Task | Fmt::Quote)
     );
     let text = RichText::new(if vector { "" } else { icon }).size(12.0);
@@ -298,6 +309,23 @@ fn formatting_button(ui: &mut Ui, icon: &str, action: Action) -> egui::Response 
                 line(at(-7.0, -7.0), at(-7.0, 7.0));
                 for y in [-4.0, 0.0, 4.0] {
                     line(at(-2.0, y), at(7.0, y));
+                }
+            }
+            Action::Copy => {
+                rect(at(-2.0, -2.0), at(8.0, 8.0));
+                line(at(-8.0, 3.0), at(-8.0, -8.0));
+                line(at(-8.0, -8.0), at(3.0, -8.0));
+                line(at(3.0, -8.0), at(3.0, -2.0));
+            }
+            Action::Paste | Action::PastePlain => {
+                rect(at(-7.0, -6.0), at(7.0, 8.0));
+                rect(at(-3.0, -9.0), at(3.0, -4.0));
+                if action == Action::Paste {
+                    line(at(-4.0, 1.0), at(4.0, 1.0));
+                    line(at(-4.0, 4.0), at(4.0, 4.0));
+                } else {
+                    line(at(-4.0, 0.0), at(4.0, 0.0));
+                    line(at(0.0, 0.0), at(0.0, 6.0));
                 }
             }
             Action::Insert => {
@@ -756,6 +784,7 @@ fn about_rows(lang: Lang) -> Vec<AboutRow> {
         by(t("Redo"), &[Action::Redo], ""),
         manual(t("Copy"), "Ctrl+C", ""),
         manual(t("Paste text or image"), "Ctrl+V", ""),
+        manual(t("Paste as plain text"), "Ctrl+Shift+V", ""),
         by(t("Paste selection"), &[Action::PastePrimary], t("Middle click")),
         by(t("Find/Replace"), &[Action::Find], ""),
         by(t("Insert image…"), &[Action::Insert], ""),
@@ -1424,6 +1453,16 @@ impl App {
                 }
             });
         }
+        let (line, _) = ui.allocate_exact_size(vec2(ui.available_width(), TOOL_SEPARATOR), Sense::hover());
+        let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
+        ui.painter().hline(line.x_range(), line.center().y, stroke);
+        ui.horizontal(|ui| {
+            for &(label, action) in clipboard_buttons() {
+                if formatting_button(ui, "", action).on_hover_text(self.t(label)).clicked() {
+                    acts.push(action);
+                }
+            }
+        });
     }
 
     fn dismiss_selection_tools(&mut self, ctx: &Context) {
@@ -1991,13 +2030,7 @@ impl App {
                     ctx.copy_text(s.to_owned());
                 }
             }
-            Action::Paste => {
-                if !self.paste_image(ctx)
-                    && let Some(t) = self.clipboard.as_mut().and_then(|c| c.get_text().ok())
-                {
-                    self.insert(ctx, &t.replace("\r\n", "\n"));
-                }
-            }
+            Action::Paste => self.paste(ctx, true, None),
             Action::Find => {
                 let f = self.find.get_or_insert_with(Find::default);
                 f.focus = true;
@@ -2034,6 +2067,26 @@ impl App {
                 self.apply_fmt(ctx, f);
             }
             _ => {}
+        }
+    }
+
+    /// Pastes clipboard text (HTML converted to Markdown when `formatted`), else an image.
+    /// `fallback` is the text egui already read from the clipboard.
+    fn paste(&mut self, ctx: &Context, formatted: bool, fallback: Option<String>) {
+        let html = formatted
+            .then(|| self.clipboard.as_mut().and_then(|c| c.get().html().ok()))
+            .flatten()
+            .map(|h| crate::html::to_markdown(&h))
+            .filter(|m| !m.is_empty());
+        let text = html
+            .or(fallback)
+            .or_else(|| self.clipboard.as_mut().and_then(|c| c.get_text().ok()))
+            .filter(|t| !t.is_empty());
+        match text {
+            Some(t) => self.insert(ctx, &t.replace("\r\n", "\n")),
+            None => {
+                self.paste_image(ctx);
+            }
         }
     }
 
@@ -2469,6 +2522,34 @@ impl App {
                         .lock_focus(true)
                         .layouter(&mut layouter)
                         .show(ui);
+                    // egui's TextEdit ignores PageUp/PageDown: move the cursor and the view by one page.
+                    if out.response.has_focus()
+                        && let Some(range) = out.cursor_range
+                    {
+                        let page = ctx.input_mut(|i| {
+                            [(Modifiers::SHIFT, true), (Modifiers::NONE, false)].into_iter().find_map(|(m, extend)| {
+                                if i.consume_key(m, Key::PageUp) {
+                                    Some((-1.0, extend))
+                                } else if i.consume_key(m, Key::PageDown) {
+                                    Some((1.0, extend))
+                                } else {
+                                    None
+                                }
+                            })
+                        });
+                        if let Some((dir, extend)) = page {
+                            let height = ui.clip_rect().height();
+                            let from = out.galley.pos_from_cursor(range.primary);
+                            let y = (from.center().y + dir * height).clamp(0.0, out.galley.rect.height());
+                            let to = out.galley.cursor_from_pos(vec2(from.min.x, y));
+                            let mut state = TextEditState::load(&ctx, id).unwrap_or_default();
+                            let anchor = if extend { range.secondary } else { to };
+                            state.cursor.set_char_range(Some(CCursorRange::two(anchor, to)));
+                            state.store(&ctx, id);
+                            drag_scroll += dir * height;
+                            ctx.request_repaint();
+                        }
+                    }
                     let endpoints = popup_selection
                         .filter(|selection| selection.doc_id == doc.id)
                         .map(|selection| selection.range)
@@ -3465,6 +3546,29 @@ impl eframe::App for App {
         for a in acts.drain(..) {
             self.run(&ctx, a);
         }
+        // egui turns Ctrl+V and Ctrl+Shift+V into Paste events: take them over from TextEdit so
+        // Ctrl+V pastes HTML as Markdown and Ctrl+Shift+V pastes plain text.
+        if !modal_open
+            && !searching
+            && self.docs.get(self.active).is_some_and(|d| ctx.memory(|m| m.has_focus(d.edit_id())))
+        {
+            let paste = ctx.input_mut(|i| {
+                let (command, shift) = (i.modifiers.command, i.modifiers.shift);
+                let mut text = None;
+                i.events.retain(|e| match e {
+                    egui::Event::Paste(t) if command => {
+                        text = Some(t.clone());
+                        false
+                    }
+                    _ => true,
+                });
+                text.map(|t| (!shift, t))
+            });
+            if let Some((formatted, text)) = paste {
+                self.pasted = true;
+                self.paste(&ctx, formatted, Some(text));
+            }
+        }
         if !modal_open && !searching {
             self.list_keys(&ctx);
         }
@@ -3725,7 +3829,7 @@ mod tests {
         let tools = app.selection_tools.as_ref().unwrap();
         assert!(!tools.emoji);
         let rects = tool_rects(&output, tools.rect, TOOL_BUTTON);
-        assert_eq!(rects.len(), formatting_buttons().len());
+        assert_eq!(rects.len(), formatting_buttons().len() + clipboard_buttons().len());
         assert!(((rects[0].left() - tools.rect.left()) - (tools.rect.right() - rects[3].right())).abs() < 1.0);
         assert!(rects.iter().all(|rect| (rect.width() - rect.height()).abs() < 0.1));
         assert!((tools.rect.left() - tools.selection.anchor.x).abs() < 2.0);
@@ -3992,6 +4096,56 @@ mod tests {
         assert_eq!(app.docs[0].text, "1. one\n2. two");
         app.run(&ctx, Action::Fmt(Fmt::Ordered));
         assert_eq!(app.docs[0].text, "one\ntwo");
+    }
+
+    #[test]
+    fn page_keys_move_cursor_and_extend_selection() {
+        let text = "line\n".repeat(200);
+        let (mut app, ctx) = app_with(&text);
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 0, 0);
+        frame(&mut app, &ctx, vec![]);
+        let key = |key, modifiers| Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+        frame(&mut app, &ctx, vec![key(Key::PageDown, Modifiers::NONE)]);
+        let (a, b) = app.selection(&ctx).unwrap();
+        assert!(a == b && a > 20, "cursor moved a page down: {a}");
+        frame(&mut app, &ctx, vec![key(Key::PageUp, Modifiers::SHIFT)]);
+        let (a, b) = app.selection(&ctx).unwrap();
+        assert_eq!((a, b > a), (0, true));
+        frame(&mut app, &ctx, vec![key(Key::PageUp, Modifiers::NONE)]);
+        assert_eq!(app.selection(&ctx), Some((0, 0)));
+    }
+
+    #[test]
+    fn ctrl_v_and_ctrl_shift_v_paste_text_without_duplicating() {
+        let (mut app, ctx) = app_with("");
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 0, 0);
+        frame(&mut app, &ctx, vec![]);
+        for (modifiers, text) in [(Modifiers::COMMAND, "a"), (Modifiers::COMMAND | Modifiers::SHIFT, "b")] {
+            let input = RawInput {
+                events: vec![Event::ModifiersChanged(modifiers), Event::Paste(text.into())],
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 800.0))),
+                ..Default::default()
+            };
+            let mut f = eframe::Frame::_new_kittest();
+            ctx.run_ui(input, |ui| app.ui(ui, &mut f)).textures_delta.clear();
+        }
+        assert_eq!(app.docs[0].text, "ab");
+    }
+
+    #[test]
+    fn selection_popup_has_clipboard_row_below_separator() {
+        let (mut app, ctx) = app_with("hello world");
+        frame(&mut app, &ctx, vec![]);
+        app.set_selection(&ctx, 0, 5);
+        frame(&mut app, &ctx, vec![]);
+        popup_output(&mut app, &ctx, vec![]);
+        let tools = app.selection_tools.as_ref().unwrap();
+        let expected =
+            tool_content_size() + egui::Frame::popup(&ctx.global_style()).inner_margin(8).total_margin().sum();
+        assert!((tools.rect.size() - expected).length() < 1.0);
+        assert_eq!(clipboard_buttons().len(), 3);
     }
 
     #[test]

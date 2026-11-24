@@ -68,7 +68,9 @@ instaluje dla bieżącego użytkownika `mdedit.desktop` i ikonę. Na Wayland iko
 | Zapisz wszystko | Ctrl+Shift+Alt+S (Ctrl+Shift+Cmd+S na macOS)¹ |
 | Zamknij / Zamknij wszystko / Wyjście | Ctrl+W / Ctrl+Shift+W / Ctrl+Q |
 | Cofnij / Ponów | Ctrl+Z / Ctrl+Y, Ctrl+Shift+Z |
-| Kopiuj / Wklej (tekst lub obraz) | Ctrl+C / Ctrl+V |
+| Kopiuj / Wklej (HTML konwertowany do Markdown, tekst lub obraz) | Ctrl+C / Ctrl+V |
+| Wklej jako czysty tekst | Ctrl+Shift+V |
+| Strona w górę / w dół (Shift rozszerza zaznaczenie) | PageUp / PageDown |
 | Wklej zaznaczenie (schowek zaznaczenia) | Środkowy przycisk myszy, Shift+Insert |
 | Szukaj / Zamień | Ctrl+F |
 | Wstaw obraz z pliku | Ctrl+Shift+I |

@@ -226,6 +226,8 @@ Close all|Zamknij wszystko
 Edit|Edycja
 Copy|Kopiuj
 Paste|Wklej
+Paste with formatting|Wklej z formatowaniem
+Paste as plain text|Wklej jako czysty tekst
 Find/Replace|Znajdź/Zamień
 Insert image…|Wstaw obraz…
 Insert emoji…|Wstaw emoji…
@@ -336,6 +338,8 @@ Close all|Alle schließen
 Edit|Bearbeiten
 Copy|Kopieren
 Paste|Einfügen
+Paste with formatting|Mit Formatierung einfügen
+Paste as plain text|Als reinen Text einfügen
 Find/Replace|Suchen/Ersetzen
 Insert image…|Bild einfügen…
 Insert emoji…|Emoji einfügen…
@@ -446,6 +450,8 @@ Close all|Tout fermer
 Edit|Édition
 Copy|Copier
 Paste|Coller
+Paste with formatting|Coller avec la mise en forme
+Paste as plain text|Coller comme texte brut
 Find/Replace|Rechercher/remplacer
 Insert image…|Insérer une image…
 Insert emoji…|Insérer un émoji…
@@ -556,6 +562,8 @@ Close all|Закрыть все
 Edit|Правка
 Copy|Копировать
 Paste|Вставить
+Paste with formatting|Вставить с форматированием
+Paste as plain text|Вставить как обычный текст
 Find/Replace|Поиск/замена
 Insert image…|Вставить изображение…
 Insert emoji…|Вставить эмодзи…
@@ -666,6 +674,8 @@ Close all|Закрити все
 Edit|Редагування
 Copy|Копіювати
 Paste|Вставити
+Paste with formatting|Вставити з форматуванням
+Paste as plain text|Вставити як звичайний текст
 Find/Replace|Пошук/заміна
 Insert image…|Вставити зображення…
 Insert emoji…|Вставити емодзі…
@@ -776,6 +786,8 @@ Close all|Zavřít vše
 Edit|Úpravy
 Copy|Kopírovat
 Paste|Vložit
+Paste with formatting|Vložit s formátováním
+Paste as plain text|Vložit jako prostý text
 Find/Replace|Najít/nahradit
 Insert image…|Vložit obrázek…
 Insert emoji…|Vložit emoji…
@@ -886,6 +898,8 @@ Close all|Zavrieť všetko
 Edit|Úpravy
 Copy|Kopírovať
 Paste|Vložiť
+Paste with formatting|Vložiť s formátovaním
+Paste as plain text|Vložiť ako čistý text
 Find/Replace|Hľadať/nahradiť
 Insert image…|Vložiť obrázok…
 Insert emoji…|Vložiť emoji…
@@ -996,6 +1010,8 @@ Close all|Cerrar todo
 Edit|Editar
 Copy|Copiar
 Paste|Pegar
+Paste with formatting|Pegar con formato
+Paste as plain text|Pegar como texto sin formato
 Find/Replace|Buscar/reemplazar
 Insert image…|Insertar imagen…
 Insert emoji…|Insertar emoji…
@@ -1106,6 +1122,8 @@ Close all|Fechar tudo
 Edit|Editar
 Copy|Copiar
 Paste|Colar
+Paste with formatting|Colar com formatação
+Paste as plain text|Colar como texto simples
 Find/Replace|Localizar/substituir
 Insert image…|Inserir imagem…
 Insert emoji…|Inserir emoji…
@@ -1216,6 +1234,8 @@ Close all|Chiudi tutto
 Edit|Modifica
 Copy|Copia
 Paste|Incolla
+Paste with formatting|Incolla con formattazione
+Paste as plain text|Incolla come testo semplice
 Find/Replace|Trova/sostituisci
 Insert image…|Inserisci immagine…
 Insert emoji…|Inserisci emoji…
@@ -1326,6 +1346,8 @@ Close all|Összes bezárása
 Edit|Szerkesztés
 Copy|Másolás
 Paste|Beillesztés
+Paste with formatting|Beillesztés formázással
+Paste as plain text|Beillesztés egyszerű szövegként
 Find/Replace|Keresés/csere
 Insert image…|Kép beszúrása…
 Insert emoji…|Emoji beszúrása…
@@ -1436,6 +1458,8 @@ Close all|Tümünü kapat
 Edit|Düzen
 Copy|Kopyala
 Paste|Yapıştır
+Paste with formatting|Biçimlendirmeyle yapıştır
+Paste as plain text|Düz metin olarak yapıştır
 Find/Replace|Bul/değiştir
 Insert image…|Resim ekle…
 Insert emoji…|Emoji ekle…
@@ -1546,6 +1570,8 @@ Close all|Închide tot
 Edit|Editare
 Copy|Copiază
 Paste|Lipește
+Paste with formatting|Lipește cu formatare
+Paste as plain text|Lipește ca text simplu
 Find/Replace|Caută/înlocuiește
 Insert image…|Inserează imagine…
 Insert emoji…|Inserează emoji…
@@ -1656,6 +1682,8 @@ Close all|Κλείσιμο όλων
 Edit|Επεξεργασία
 Copy|Αντιγραφή
 Paste|Επικόλληση
+Paste with formatting|Επικόλληση με μορφοποίηση
+Paste as plain text|Επικόλληση ως απλό κείμενο
 Find/Replace|Εύρεση/αντικατάσταση
 Insert image…|Εισαγωγή εικόνας…
 Insert emoji…|Εισαγωγή emoji…
@@ -1766,6 +1794,8 @@ Close all|Uždaryti visus
 Edit|Redagavimas
 Copy|Kopijuoti
 Paste|Įklijuoti
+Paste with formatting|Įklijuoti su formatavimu
+Paste as plain text|Įklijuoti kaip paprastą tekstą
 Find/Replace|Ieškoti/keisti
 Insert image…|Įterpti paveikslėlį…
 Insert emoji…|Įterpti jaustuką…
@@ -1876,6 +1906,8 @@ Close all|すべて閉じる
 Edit|編集
 Copy|コピー
 Paste|貼り付け
+Paste with formatting|書式付きで貼り付け
+Paste as plain text|テキストとして貼り付け
 Find/Replace|検索/置換
 Insert image…|画像を挿入…
 Insert emoji…|絵文字を挿入…
@@ -1986,6 +2018,8 @@ Close all|全部关闭
 Edit|编辑
 Copy|复制
 Paste|粘贴
+Paste with formatting|带格式粘贴
+Paste as plain text|粘贴为纯文本
 Find/Replace|查找/替换
 Insert image…|插入图片…
 Insert emoji…|插入表情符号…
@@ -2096,6 +2130,8 @@ Close all|סגירת הכול
 Edit|עריכה
 Copy|העתקה
 Paste|הדבקה
+Paste with formatting|הדבקה עם עיצוב
+Paste as plain text|הדבקה כטקסט פשוט
 Find/Replace|חיפוש/החלפה
 Insert image…|הוספת תמונה…
 Insert emoji…|הוספת אמוג׳י…
@@ -2206,6 +2242,8 @@ Close all|सब बंद करें
 Edit|संपादित करें
 Copy|कॉपी करें
 Paste|चिपकाएँ
+Paste with formatting|फ़ॉर्मैटिंग के साथ चिपकाएँ
+Paste as plain text|सादे टेक्स्ट के रूप में चिपकाएँ
 Find/Replace|खोजें/बदलें
 Insert image…|चित्र डालें…
 Insert emoji…|इमोजी डालें…
@@ -2316,6 +2354,8 @@ Close all|সব বন্ধ করুন
 Edit|সম্পাদনা
 Copy|কপি
 Paste|পেস্ট
+Paste with formatting|ফরম্যাটিং সহ পেস্ট করুন
+Paste as plain text|সাধারণ টেক্সট হিসেবে পেস্ট করুন
 Find/Replace|খুঁজুন/প্রতিস্থাপন
 Insert image…|ছবি সন্নিবেশ করুন…
 Insert emoji…|ইমোজি সন্নিবেশ করুন…
@@ -2426,6 +2466,8 @@ Close all|إغلاق الكل
 Edit|تحرير
 Copy|نسخ
 Paste|لصق
+Paste with formatting|لصق مع التنسيق
+Paste as plain text|لصق كنص عادي
 Find/Replace|بحث/استبدال
 Insert image…|إدراج صورة…
 Insert emoji…|إدراج رمز تعبيري…
@@ -2536,6 +2578,8 @@ Close all|سب بند کریں
 Edit|ترمیم
 Copy|نقل
 Paste|چسپاں کریں
+Paste with formatting|فارمیٹنگ کے ساتھ چسپاں کریں
+Paste as plain text|سادہ متن کے طور پر چسپاں کریں
 Find/Replace|تلاش/تبدیل
 Insert image…|تصویر داخل کریں…
 Insert emoji…|ایموجی داخل کریں…

@@ -21,3 +21,5 @@ core.*
 
 # Release artifacts (AppImage etc.)
 /releases/
+AGENTS.md
+PROJECT_INDEX.yaml
